@@ -1,0 +1,59 @@
+cabal-version:      3.4
+name:               mercury
+version:            0.1.0.0
+license:            MIT
+license-file:       LICENSE
+author:             Yecine Megdiche
+maintainer:         yecine.megdiche@gmail.com
+category:           System
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+common warnings
+    ghc-options:
+        -Wall
+        -Wcompat
+        -- -Werror
+        -Widentities
+        -Wincomplete-record-updates
+        -Wincomplete-uni-patterns
+        -Wmissing-export-lists
+        -Wno-unused-do-bind
+        -Wno-unused-imports
+        -Wno-unused-packages
+        -Wredundant-constraints
+
+library
+    import:           warnings
+    exposed-modules:  Mercury.DevMain
+    build-depends:
+          base ^>=4.18.3.0
+        , gi-gtk4 == 4.*
+        , gi-glib
+        , haskell-gi-base
+        , text
+        , transformers
+        , containers
+        , time
+    hs-source-dirs:   src
+    default-language: Haskell2010
+
+executable mercury
+    import:           warnings
+    main-is:          Main.hs
+    build-depends:
+        base ^>=4.18.3.0,
+        mercury
+
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+test-suite mercury-test
+    import:           warnings
+    default-language: Haskell2010
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    build-depends:
+        base ^>=4.18.3.0,
+        mercury
