@@ -11,20 +11,20 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Mercury.DevMain (update) where
 
+import Control.Concurrent
+import Control.Concurrent.STM
 import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Reader
 import Control.Monad.Trans.Writer
 import Data.Foldable
 import Data.Function
-import Data.Functor
 import Data.GI.Base (AttrOp (On, (:=)), new, set)
-import Data.IORef
 import Data.List (nubBy)
 import qualified Data.Map.Strict as M
 import Data.Maybe
@@ -33,7 +33,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
 import GHC.IO.FD (FD (fdFD))
-import GHC.IO.Handle.FD
 import qualified GI.GLib as GLib
 import qualified GI.Gtk as Gtk
 import System.IO
@@ -57,31 +56,67 @@ myWidget =
             ]
         }
 
+data RuntimeState = RuntimeState
+    { varValues :: !(TVar VariableEnv)
+    , subscribers :: !(M.Map Text [MercuryRuntime ()])
+    }
+
+data RuntimeEnvironment = RuntimeEnvironment
+    { state :: !RuntimeState
+    }
+
+type MercuryRuntime = ReaderT RuntimeEnvironment IO
+
+updateVariableValue :: Variable -> Text -> MercuryRuntime ()
+updateVariableValue Variable{..} newVal = do
+    RuntimeState{..} <- asks state
+    didChange <- liftIO $ atomically $ do
+        previousValue <- M.lookup name <$> readTVar varValues
+        let changed = previousValue /= Just newVal
+        when changed $ modifyTVar varValues (M.insert name newVal)
+        return changed
+    when didChange $
+        sequence_ (M.findWithDefault [] name subscribers)
+
+setupVariable :: Variable -> MercuryRuntime ()
+setupVariable v@Variable{..} = do
+    env <- ask
+    let updateVariableValue' val = runReaderT (updateVariableValue v val) env
+    case runtimeBehavior of
+        Polling{..} -> do
+            liftIO $ void $ forkIO $ forever $ do
+                val <- runPollingAction action
+                updateVariableValue' val
+                threadDelay (intervalMs * 1000)
+        Subscription{..} -> liftIO $ do
+            let SubscriptionScriptAction (Script path args) = script
+            (_, Just hout, _, _) <- createProcess (proc path args){std_out = CreatePipe}
+            hSetBuffering hout LineBuffering
+            liftIO $ void $ forkIO $ forever $ do
+                line <- hGetLine hout
+                updateVariableValue' (T.pack line)
+
+updateComponent :: LiveComponent -> MercuryRuntime ()
+updateComponent LiveLabel{..} = do
+    env <- asks (varValues . state)
+    vals <- liftIO $ readTVarIO env
+    liftIO $ #setLabel labelWidget (eval labelExpr vals)
+
 activate :: Gtk.Application -> IO ()
 activate app = do
     -- Step 1: Render the widget, collecting live components
     (widget, liveComponents) <- runWriterT $ render (M.fromList [("cpu_usage", "14")]) myWidget
-
-    -- Step 2: Set up variable polling and live updates
-    variables <- newIORef M.empty
+    -- Step2: Setup rendering updates for all variables
     let liveComponentIndex = buildLiveComponentIndex liveComponents
+    let subscriberMap = M.map (map updateComponent) liveComponentIndex
+
+    -- Step 3: Set up runtime environment
+    runtimeState <- (`RuntimeState` subscriberMap) <$> newTVarIO M.empty
+    let runtimeEnv = RuntimeEnvironment runtimeState
+
+    -- Step 4: initialize variables
     let allVars = getAllVars myWidget
-    let updateValue :: Text -> Text -> IO ()
-        updateValue varName newVal = do
-            updated <- atomicModifyIORef' variables (\env -> let updated = M.insert varName newVal env in (updated, updated))
-            traverse_ (updateComponent updated) (M.findWithDefault [] varName liveComponentIndex)
-    let updateVariable :: Variable -> IO ()
-        updateVariable Variable{..} = case runtimeBehavior of
-            Polling _ -> do
-                runAction action >>= updateValue name
-            Subscription -> mempty
-    let intializeVariable :: Variable -> IO ()
-        intializeVariable v@Variable{..} = case runtimeBehavior of
-            Polling{..} -> updateVariable v >> gPoll intervalMs (updateVariable v)
-            Subscription -> case action of
-                Script scriptPath args -> subscribeToScript (updateValue name) scriptPath args
-                CustomIO _ -> fail "Subscriptions cannot use CustomIO actions"
-    traverse_ intializeVariable allVars
+    runReaderT (traverse_ setupVariable allVars) runtimeEnv
 
     window <-
         new
@@ -92,43 +127,45 @@ activate app = do
             , #defaultWidth := 800
             , #defaultHeight := 600
             ]
-    #show window
+    #present window
+
+data ScriptAction = Script !FilePath ![String]
+
+data PollingAction
+    = PollingCustomIO !(IO Text)
+    | PollingScriptAction !ScriptAction
+
+data SubscriptionAction
+    = SubscriptionScriptAction !ScriptAction
 
 data RuntimeBehavior
-    = Polling {intervalMs :: !Int}
-    | Subscription
+    = Polling {intervalMs :: !Int, action :: !PollingAction}
+    | Subscription {script :: !SubscriptionAction}
 
-data Action = CustomIO (IO Text) | Script FilePath [String]
-
-runAction :: Action -> IO Text
-runAction (CustomIO io) = io
-runAction (Script path args) = do
+runPollingAction :: PollingAction -> IO Text
+runPollingAction (PollingCustomIO io) = io
+runPollingAction (PollingScriptAction (Script path args)) = do
     output <- readProcess path args ""
     return $ T.pack (init output)
 
 data Variable = Variable
     { name :: !Text
     , runtimeBehavior :: !RuntimeBehavior
-    , action :: Action
     }
 
 timestampVar :: Variable
 timestampVar =
     Variable
         { name = "current_time"
-        , runtimeBehavior = Polling 1000
-        , action = CustomIO (tshow <$> getCurrentTime)
+        , runtimeBehavior = Polling 1000 (PollingCustomIO (tshow <$> getCurrentTime))
         }
-
-updateComponent :: VariableEnv -> LiveComponent -> IO ()
-updateComponent env LiveLabel{..} = #setLabel labelWidget (eval labelExpr env)
 
 type VariableEnv = M.Map Text Text
 
 data Expression a = Expression
     { dependencies :: !(S.Set Text)
     , vars :: ![Variable]
-    , eval :: VariableEnv -> a
+    , eval :: !(VariableEnv -> a)
     }
 
 isStatic :: Expression a -> Bool
@@ -142,10 +179,6 @@ use v@(Variable{..}) =
         , vars = [v]
         }
 
-gPoll :: Int -> IO () -> IO ()
-gPoll timeout action =
-    void $ GLib.timeoutAdd GLib.PRIORITY_DEFAULT (fromIntegral timeout) (action $> True)
-
 (#) :: Variable -> Expression Text
 (#) = use
 infixl 9 #
@@ -154,16 +187,14 @@ cpuUsage :: Variable
 cpuUsage =
     Variable
         { name = "cpu_usage"
-        , runtimeBehavior = Polling 2000
-        , action = CustomIO (return "42")
+        , runtimeBehavior = Polling 2000 (PollingCustomIO (return "42"))
         }
 
 xpropSpy :: Variable
 xpropSpy =
     Variable
         { name = "xprop_spy"
-        , runtimeBehavior = Subscription
-        , action = Script "xprop" ["-root", "-spy", "_NET_ACTIVE_WINDOW"]
+        , runtimeBehavior = Subscription (SubscriptionScriptAction (Script "xprop" ["-root", "-spy", "_NET_ACTIVE_WINDOW"]))
         }
 
 instance Functor Expression where
@@ -210,31 +241,6 @@ data LiveComponent = LiveLabel
     { labelWidget :: !Gtk.Label
     , labelExpr :: !(Expression Text)
     }
-
-subscribeToScript :: (Text -> IO ()) -> FilePath -> [String] -> IO ()
-subscribeToScript action scriptPath args = do
-    (_, _, stdoutFd, _) <-
-        GLib.spawnAsyncWithPipes
-            Nothing
-            (scriptPath : args)
-            Nothing
-            [GLib.SpawnFlagsSearchPath]
-            Nothing
-    channel <- GLib.iOChannelUnixNew stdoutFd
-    GLib.iOChannelSetEncoding channel (Just "UTF-8")
-    void
-        $ GLib.ioAddWatch
-            channel
-            GLib.PRIORITY_DEFAULT
-            [GLib.IOConditionIn, GLib.IOConditionHup]
-        $ \_ conditions _ -> do
-            if GLib.IOConditionHup `elem` conditions
-                then pure False
-                else do
-                    (status, line, _, _) <- GLib.iOChannelReadLine channel
-                    if status == GLib.IOStatusNormal
-                        then action line $> True
-                        else pure False
 
 render :: VariableEnv -> Widget -> WriterT [LiveComponent] IO Gtk.Widget
 render env (Label{..}) = do
