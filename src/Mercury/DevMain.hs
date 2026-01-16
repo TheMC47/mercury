@@ -9,7 +9,7 @@
 -- - Handle errors better, especially decoding variable values
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -39,6 +39,9 @@ import Data.Time
 import GHC.IO.FD (FD (fdFD))
 import qualified GI.GLib as GLib
 import qualified GI.Gtk as Gtk
+import Mercury.Runtime
+import Mercury.Variable
+import Mercury.Widget
 import System.IO
 import System.Process
 import Text.Read
@@ -59,23 +62,6 @@ myWidget =
             , Label{text = (#) xpropSpy}
             ]
         }
-
-data RuntimeEnvironment = RuntimeEnvironment
-    { varValues :: !(TVar VariableEnv)
-    , subscribers :: !(M.Map Text (MercuryRuntime ()))
-    }
-
-newtype MercuryRuntime a = MercuryRuntime (ReaderT RuntimeEnvironment IO a)
-    deriving (Functor, Applicative, Monad, MonadFail, MonadIO, MonadReader RuntimeEnvironment)
-
-instance (Semigroup a) => Semigroup (MercuryRuntime a) where
-    (<>) = liftA2 (<>)
-
-instance (Monoid a) => Monoid (MercuryRuntime a) where
-    mempty = pure mempty
-
-runMercuryRuntime :: MercuryRuntime a -> RuntimeEnvironment -> IO a
-runMercuryRuntime (MercuryRuntime m) = runReaderT m
 
 updateVariableValue :: Variable -> Text -> MercuryRuntime ()
 updateVariableValue Variable{..} newVal = do
@@ -138,29 +124,11 @@ activate app = do
             ]
     #present window
 
-data ScriptAction = Script !FilePath ![String]
-
-data PollingAction
-    = PollingCustomIO !(IO Text)
-    | PollingScriptAction !ScriptAction
-
-data SubscriptionAction
-    = SubscriptionScriptAction !ScriptAction
-
-data RuntimeBehavior
-    = Polling {intervalMs :: !Int, action :: !PollingAction}
-    | Subscription {script :: !SubscriptionAction}
-
 runPollingAction :: PollingAction -> IO Text
 runPollingAction (PollingCustomIO io) = io
 runPollingAction (PollingScriptAction (Script path args)) = do
     output <- readProcess path args ""
     return $ T.pack (init output)
-
-data Variable = Variable
-    { name :: !Text
-    , runtimeBehavior :: !RuntimeBehavior
-    }
 
 timestampVar :: Variable
 timestampVar =
@@ -168,29 +136,6 @@ timestampVar =
         { name = "current_time"
         , runtimeBehavior = Polling 1000 (PollingCustomIO (tshow <$> getCurrentTime))
         }
-
-type VariableEnv = M.Map Text Text
-
-data Expression a = Expression
-    { dependencies :: !(S.Set Text)
-    , vars :: ![Variable]
-    , eval :: !(VariableEnv -> a)
-    }
-
-isStatic :: Expression a -> Bool
-isStatic e = S.null (dependencies e)
-
-use :: Variable -> Expression Text
-use v@(Variable{..}) =
-    Expression
-        { dependencies = S.singleton name
-        , eval = fromMaybe "" . M.lookup name
-        , vars = [v]
-        }
-
-(#) :: Variable -> Expression Text
-(#) = use
-infixl 9 #
 
 cpuUsage :: Variable
 cpuUsage =
@@ -206,45 +151,11 @@ xpropSpy =
         , runtimeBehavior = Subscription (SubscriptionScriptAction (Script "xprop" ["-root", "-spy", "_NET_ACTIVE_WINDOW"]))
         }
 
-instance Functor Expression where
-    fmap f e = e{eval = f . eval e}
-instance Applicative Expression where
-    pure x =
-        Expression
-            { dependencies = S.empty
-            , eval = const x
-            , vars = []
-            }
-    (Expression depsF varsF evalF) <*> (Expression depsX varsX evalX) =
-        Expression
-            { dependencies = depsF `S.union` depsX
-            , eval = evalF <*> evalX
-            , vars = nubBy ((==) `on` name) (varsF <> varsX)
-            }
-
 cpuAnd100 :: Expression Int
 cpuAnd100 =
     do
         uText <- (#) cpuUsage
         pure $ fromMaybe 0 (readText @Int uText)
-
-data Widget
-    = Box
-        { spaceEvenly :: !Bool
-        , children :: ![Widget]
-        }
-    | Label
-        { text :: !(Expression Text)
-        }
-    | Button
-        { child :: !Widget
-        }
-
-getAllVars :: Widget -> [Variable]
-getAllVars (Label{..}) = vars text
-getAllVars (Box{..}) =
-    nubBy ((==) `on` name) $ concatMap getAllVars children
-getAllVars (Button{..}) = getAllVars child
 
 data LiveComponent = LiveLabel
     { labelWidget :: !Gtk.Label

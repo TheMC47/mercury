@@ -25,7 +25,12 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  Mercury.DevMain
+    exposed-modules:
+          Mercury.DevMain
+        , Mercury.Runtime
+        , Mercury.Variable
+        , Mercury.Widget
+
     build-depends:
           base ^>=4.18.3.0
         , gi-gtk4 == 4.*
