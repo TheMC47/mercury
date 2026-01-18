@@ -1,8 +1,9 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Mercury.Widget where
 
+import Control.Monad.Identity
 import Data.Function (on)
 import Data.List (nubBy)
 import qualified Data.Map.Strict as M
@@ -11,10 +12,10 @@ import qualified Data.Set as S
 import Data.Text (Text)
 import Mercury.Variable
 
-getAllVars :: Widget -> [Variable]
-getAllVars (Label{..}) = vars text
+getAllVars :: Widget -> S.Set Variable
+getAllVars (Label{..}) = dependencies text
 getAllVars (Box{..}) =
-    nubBy ((==) `on` name) $ concatMap getAllVars children
+    S.unions $ map getAllVars children
 getAllVars (Button{..}) = getAllVars child
 
 data Widget
@@ -30,9 +31,8 @@ data Widget
         }
 
 data Expression a = Expression
-    { dependencies :: !(S.Set Text)
-    , vars :: ![Variable]
-    , eval :: !(VariableEnv -> a)
+    { dependencies :: !(S.Set Variable)
+    , eval :: forall m. (Monad m) => (Variable -> m Text) -> m a
     }
 
 isStatic :: Expression a -> Bool
@@ -41,9 +41,8 @@ isStatic e = S.null (dependencies e)
 use :: Variable -> Expression Text
 use v@(Variable{..}) =
     Expression
-        { dependencies = S.singleton name
-        , eval = fromMaybe "" . M.lookup name
-        , vars = [v]
+        { dependencies = S.singleton v
+        , eval = ($ v) -- Just apply it
         }
 
 (#) :: Variable -> Expression Text
@@ -51,17 +50,16 @@ use v@(Variable{..}) =
 infixl 9 #
 
 instance Functor Expression where
-    fmap f e = e{eval = f . eval e}
+    fmap f e = e{eval = fmap f . eval e}
+
 instance Applicative Expression where
     pure x =
         Expression
             { dependencies = S.empty
-            , eval = const x
-            , vars = []
+            , eval = const (pure x)
             }
-    (Expression depsF varsF evalF) <*> (Expression depsX varsX evalX) =
+    (Expression depsF evalF) <*> (Expression depsX evalX) =
         Expression
             { dependencies = depsF `S.union` depsX
-            , eval = evalF <*> evalX
-            , vars = nubBy ((==) `on` name) (varsF <> varsX)
+            , eval = \l -> evalF l <*> evalX l
             }

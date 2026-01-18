@@ -1,14 +1,23 @@
 module Mercury.Variable where
 
+import Data.Function
+import Data.Hashable
 import qualified Data.Map.Strict as M
 import Data.Text (Text)
-
-type VariableEnv = M.Map Text Text
 
 data Variable = Variable
     { name :: !Text
     , runtimeBehavior :: !RuntimeBehavior
     }
+
+instance Eq Variable where
+    (==) = (==) `on` name
+
+instance Ord Variable where
+    compare = compare `on` name
+
+instance Hashable Variable where
+    hashWithSalt salt var = hashWithSalt salt (name var)
 
 data ScriptAction = Script !FilePath ![String]
 

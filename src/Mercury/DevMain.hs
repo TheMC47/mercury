@@ -18,15 +18,14 @@
 
 module Mercury.DevMain (update) where
 
-import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader (MonadReader, ask, asks)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Reader (ReaderT (..))
-import Control.Monad.Trans.Writer
+import Control.Monad.Trans.Writer (WriterT, runWriterT, tell)
 import Data.Foldable
-import Data.Function
 import Data.GI.Base (AttrOp (On, (:=)), new, set)
 import Data.List (nubBy)
 import qualified Data.Map.Strict as M
@@ -40,11 +39,15 @@ import GHC.IO.FD (FD (fdFD))
 import qualified GI.GLib as GLib
 import qualified GI.Gtk as Gtk
 import Mercury.Runtime
+import Mercury.Runtime.Identified (newStoreIO)
 import Mercury.Variable
 import Mercury.Widget
+import qualified StmContainers.Map as SM
 import System.IO
 import System.Process
-import Text.Read
+import Text.Read (readMaybe)
+import UnliftIO (askRunInIO)
+import UnliftIO.Concurrent
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
@@ -64,54 +67,41 @@ myWidget =
         }
 
 updateVariableValue :: Variable -> Text -> MercuryRuntime ()
-updateVariableValue Variable{..} newVal = do
-    RuntimeEnvironment{..} <- ask
-    didChange <- liftIO $ atomically $ do
-        previousValue <- M.lookup name <$> readTVar varValues
-        let changed = previousValue /= Just newVal
-        when changed $ modifyTVar varValues (M.insert name newVal)
-        return changed
-    when didChange $
-        M.findWithDefault mempty name subscribers
+updateVariableValue = updateValue
 
 setupVariable :: Variable -> MercuryRuntime ()
 setupVariable v@Variable{..} = do
-    env <- ask
-    let updateVariableValue' val = runMercuryRuntime (updateVariableValue v val) env
     case runtimeBehavior of
         Polling{..} -> do
-            liftIO $ void $ forkIO $ forever $ do
+            void $ forkIO $ forever $ do
                 val <- runPollingAction action
-                updateVariableValue' val
+                updateVariableValue v val
                 threadDelay (intervalMs * 1000)
-        Subscription{..} -> liftIO $ do
+        Subscription{..} -> do
             let SubscriptionScriptAction (Script path args) = script
-            (_, Just hout, _, _) <- createProcess (proc path args){std_out = CreatePipe}
-            hSetBuffering hout LineBuffering
-            liftIO $ void $ forkIO $ forever $ do
-                line <- hGetLine hout
-                updateVariableValue' (T.pack line)
+            (_, Just hout, _, _) <- liftIO $ createProcess (proc path args){std_out = CreatePipe}
+            liftIO $ hSetBuffering hout LineBuffering
+            void $ forkIO $ forever $ do
+                line <- liftIO $ hGetLine hout
+                updateVariableValue v (T.pack line)
 
 updateComponent :: LiveComponent -> MercuryRuntime ()
-updateComponent LiveLabel{..} = do
-    env <- asks varValues
-    vals <- liftIO $ readTVarIO env
-    liftIO $ #setLabel labelWidget (eval labelExpr vals)
+updateComponent LiveLabel{..} = evalExpression labelExpr >>= #setLabel labelWidget
 
 activate :: Gtk.Application -> IO ()
 activate app = do
+    runtimeVariables <- SM.newIO
+    uidStore <- newStoreIO
+    runMercuryRuntime (activate' app) (RuntimeEnvironment{..})
+
+activate' :: Gtk.Application -> MercuryRuntime ()
+activate' app = do
     -- Step 1: Render the widget, collecting live components
-    (widget, liveComponents) <- runWriterT $ render mempty myWidget
-    -- Step2: Setup rendering updates for all variables
-    let liveComponentIndex = buildLiveComponentIndex liveComponents
-    let subscriberMap = M.map (mconcat . map updateComponent) liveComponentIndex
-
-    -- Step 3: Set up runtime environment
-    runtimeEnv <- (`RuntimeEnvironment` subscriberMap) <$> newTVarIO M.empty
-
-    -- Step 4: initialize variables
+    (widget, liveComponents) <- runWriterT $ render myWidget
     let allVars = getAllVars myWidget
-    runMercuryRuntime (traverse_ setupVariable allVars) runtimeEnv
+    traverse_ addVariable (S.toList allVars)
+    traverse_ setupVariable (S.toList allVars)
+    traverse_ setupLiveComponent liveComponents
 
     window <-
         new
@@ -124,10 +114,10 @@ activate app = do
             ]
     #present window
 
-runPollingAction :: PollingAction -> IO Text
-runPollingAction (PollingCustomIO io) = io
+runPollingAction :: PollingAction -> MercuryRuntime Text
+runPollingAction (PollingCustomIO io) = liftIO io
 runPollingAction (PollingScriptAction (Script path args)) = do
-    output <- readProcess path args ""
+    output <- liftIO $ readProcess path args ""
     return $ T.pack (init output)
 
 timestampVar :: Variable
@@ -162,29 +152,25 @@ data LiveComponent = LiveLabel
     , labelExpr :: !(Expression Text)
     }
 
-render :: VariableEnv -> Widget -> WriterT [LiveComponent] IO Gtk.Widget
-render env (Label{..}) = do
-    l <- new Gtk.Label [#label := eval text env]
+render :: Widget -> WriterT [LiveComponent] MercuryRuntime Gtk.Widget
+render (Label{..}) = do
+    value <- lift $ evalExpression text
+    l <- new Gtk.Label [#label := value]
     unless (isStatic text) $ tell [LiveLabel l text]
     Gtk.toWidget l
-render env (Box{..}) = do
+render (Box{..}) = do
     box <- new Gtk.Box [#homogeneous := spaceEvenly]
-    traverse_ (#append box <=< render env) children
+    traverse_ (#append box <=< render) children
     Gtk.toWidget box
-render env (Button{..}) = do
+render (Button{..}) = do
     button <- new Gtk.Button []
-    childWidget <- render env child
+    childWidget <- render child
     button `set` [#child := childWidget]
     Gtk.toWidget button
 
-buildLiveComponentIndex :: [LiveComponent] -> M.Map Text [LiveComponent] -- Variable name to components depending on it
-buildLiveComponentIndex components =
-    M.fromListWith
-        (++)
-        [(var, [comp]) | comp <- components, var <- S.toList (dependencies (getExpr comp))]
-  where
-    getExpr :: LiveComponent -> Expression Text
-    getExpr (LiveLabel{..}) = labelExpr
+setupLiveComponent :: LiveComponent -> MercuryRuntime ()
+setupLiveComponent comp@LiveLabel{..} =
+    traverse_ (`subscribeToVariable` updateComponent comp) (S.toList (dependencies labelExpr))
 
 update :: IO ()
 update = do
