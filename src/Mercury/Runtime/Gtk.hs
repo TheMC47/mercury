@@ -1,12 +1,29 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedLabels #-}
 
-module Mercury.Runtime.Gtk () where
+module Mercury.Runtime.Gtk (handle) where
 
-import Data.Text
+import Data.Foldable (traverse_)
+import Data.GI.Base
+import Data.GI.Base.Overloading (IsDescendantOf)
+import qualified GI.Gtk as Gtk
 import Mercury.Runtime
-import Mercury.Widget
+import Mercury.Runtime.Rendering.Handle
 
--- Option1: GADT
--- Option2: they get a callback to register for updates
+handle :: Handle MercuryRuntime Gtk.Widget Gtk.Box Gtk.Label Gtk.Button
+handle =
+    Handle
+        { boxToWidget = Gtk.toWidget
+        , labelToWidget = Gtk.toWidget
+        , buttonToWidget = Gtk.toWidget
+        , renderBox = gtkRenderBox
+        , renderLabel = \str -> new Gtk.Label [#label := str]
+        , renderButton = \w -> new Gtk.Button [#child := w]
+        , setLabelText = #setLabel
+        }
 
--- Represents a live property of a widget: a handle to the backend widget and an expression it's bound to
+gtkRenderBox :: Bool -> [Gtk.Widget] -> MercuryRuntime Gtk.Box
+gtkRenderBox homogeneous ws = do
+    box <- new Gtk.Box [#homogeneous := homogeneous]
+    traverse_ (#append box) ws
+    return box

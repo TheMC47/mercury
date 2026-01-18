@@ -11,6 +11,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -39,7 +40,9 @@ import GHC.IO.FD (FD (fdFD))
 import qualified GI.GLib as GLib
 import qualified GI.Gtk as Gtk
 import Mercury.Runtime
-import Mercury.Runtime.Identified (newStoreIO)
+import qualified Mercury.Runtime.Gtk as MGtk
+import Mercury.Runtime.Identified (Identified, newStoreIO)
+import qualified Mercury.Runtime.Rendering.Handle as Render
 import Mercury.Variable
 import Mercury.Widget
 import qualified StmContainers.Map as SM
@@ -85,9 +88,6 @@ setupVariable v@Variable{..} = do
                 line <- liftIO $ hGetLine hout
                 updateVariableValue v (T.pack line)
 
-updateComponent :: LiveComponent -> MercuryRuntime ()
-updateComponent LiveLabel{..} = evalExpression labelExpr >>= #setLabel labelWidget
-
 activate :: Gtk.Application -> IO ()
 activate app = do
     runtimeVariables <- SM.newIO
@@ -96,12 +96,11 @@ activate app = do
 
 activate' :: Gtk.Application -> MercuryRuntime ()
 activate' app = do
-    -- Step 1: Render the widget, collecting live components
-    (widget, liveComponents) <- runWriterT $ render myWidget
     let allVars = getAllVars myWidget
     traverse_ addVariable (S.toList allVars)
     traverse_ setupVariable (S.toList allVars)
-    traverse_ setupLiveComponent liveComponents
+
+    widget <- render MGtk.handle myWidget
 
     window <-
         new
@@ -147,30 +146,33 @@ cpuAnd100 =
         uText <- (#) cpuUsage
         pure $ fromMaybe 0 (readText @Int uText)
 
-data LiveComponent = LiveLabel
-    { labelWidget :: !Gtk.Label
-    , labelExpr :: !(Expression Text)
-    }
+-- TODO collapse [Identified (MercuryRuntime ())] into Identified (MercuryRuntime ())
+mountExpression :: Expression a -> (a -> MercuryRuntime ()) -> MercuryRuntime [Identified (MercuryRuntime ())]
+mountExpression expr onChange =
+    traverse
+        ( \var ->
+            subscribeToVariable var $ evalExpression expr >>= onChange
+        )
+        (S.toList (dependencies expr))
 
-render :: Widget -> WriterT [LiveComponent] MercuryRuntime Gtk.Widget
-render (Label{..}) = do
-    value <- lift $ evalExpression text
-    l <- new Gtk.Label [#label := value]
-    unless (isStatic text) $ tell [LiveLabel l text]
-    Gtk.toWidget l
-render (Box{..}) = do
-    box <- new Gtk.Box [#homogeneous := spaceEvenly]
-    traverse_ (#append box <=< render) children
-    Gtk.toWidget box
-render (Button{..}) = do
-    button <- new Gtk.Button []
-    childWidget <- render child
-    button `set` [#child := childWidget]
-    Gtk.toWidget button
-
-setupLiveComponent :: LiveComponent -> MercuryRuntime ()
-setupLiveComponent comp@LiveLabel{..} =
-    traverse_ (`subscribeToVariable` updateComponent comp) (S.toList (dependencies labelExpr))
+render ::
+    Render.Handle MercuryRuntime widget box label button ->
+    Widget ->
+    MercuryRuntime widget
+render h@Render.Handle{..} = \case
+    Label{..} -> do
+        textValue <- evalExpression text
+        labelWidget <- renderLabel textValue
+        unless (isStatic text) (void $ mountExpression text (setLabelText labelWidget))
+        labelToWidget labelWidget
+    Box{..} -> do
+        renderedChildren <- traverse (render h) children
+        boxWidget <- renderBox spaceEvenly renderedChildren
+        boxToWidget boxWidget
+    Button{..} -> do
+        renderedChild <- render h child
+        buttonWidget <- renderButton renderedChild
+        buttonToWidget buttonWidget
 
 update :: IO ()
 update = do

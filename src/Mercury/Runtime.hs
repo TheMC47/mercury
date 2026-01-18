@@ -16,6 +16,7 @@ module Mercury.Runtime (
     getValue,
     updateValue,
     subscribeToVariable,
+    ioa,
 ) where
 
 import Control.Concurrent.STM
@@ -60,6 +61,7 @@ ioa = liftIO . atomically
 newRV :: MercuryRuntime RuntimeVariable
 newRV = RuntimeVariable "" <$> liftIO SM.newIO
 
+-- TODO the rendering handle belongs here
 data RuntimeEnvironment = RuntimeEnvironment
     { runtimeVariables :: !(SM.Map Variable RuntimeVariable)
     , uidStore :: !UniqueIDStore

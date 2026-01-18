@@ -28,6 +28,7 @@ library
     exposed-modules:
           Mercury.DevMain
         , Mercury.Runtime
+        , Mercury.Runtime.Rendering.Handle
         , Mercury.Runtime.Gtk
         , Mercury.Runtime.Identified
         , Mercury.Variable
