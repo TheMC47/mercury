@@ -44,35 +44,37 @@ import qualified GI.GLib as GLib
 import qualified GI.Gtk as Gtk
 import qualified ListT as LT
 import Mercury.Runtime.Identified
+import Mercury.Runtime.Rendering.Backend
 import Mercury.Variable
 import Mercury.Widget
 import qualified StmContainers.Map as SM
 import qualified StmContainers.Set as SS
 import UnliftIO (MonadUnliftIO)
 
-data RuntimeVariable = RuntimeVariable
+data RuntimeVariable b = RuntimeVariable
     { variableValue :: !Text
-    , subscribers :: !(IdentifiedSet (MercuryRuntime ()))
+    , subscribers :: !(IdentifiedSet (MercuryRuntime b ()))
     }
 
 ioa :: (MonadIO m) => STM a -> m a
 ioa = liftIO . atomically
 
-newRV :: MercuryRuntime RuntimeVariable
+newRV :: MercuryRuntime b (RuntimeVariable b)
 newRV = RuntimeVariable "" <$> liftIO SM.newIO
 
--- TODO the rendering handle belongs here
-data RuntimeEnvironment = RuntimeEnvironment
-    { runtimeVariables :: !(SM.Map Variable RuntimeVariable)
+data RuntimeEnvironment b = (RenderingBackend b) =>
+    RuntimeEnvironment
+    { runtimeVariables :: !(SM.Map Variable (RuntimeVariable b))
     , uidStore :: !UniqueIDStore
+    , renderingBackend :: !b
     }
 
-withUID :: a -> MercuryRuntime (Identified a)
+withUID :: a -> MercuryRuntime b (Identified a)
 withUID a =
     asks uidStore
         >>= ioa . (`identify` a)
 
-addVariable :: Variable -> MercuryRuntime ()
+addVariable :: Variable -> MercuryRuntime b ()
 addVariable v = do
     vars <- asks runtimeVariables
     rv <- newRV
@@ -81,7 +83,7 @@ addVariable v = do
 newtype UID = UID {getUID :: Int}
     deriving (Eq, Ord, Show, Num, Hashable)
 
-subscribeToVariable :: Variable -> MercuryRuntime () -> MercuryRuntime (Identified (MercuryRuntime ()))
+subscribeToVariable :: Variable -> MercuryRuntime b () -> MercuryRuntime b (Identified (MercuryRuntime b ()))
 subscribeToVariable var action = do
     idAction <- withUID action
     RuntimeEnvironment{..} <- ask
@@ -90,7 +92,7 @@ subscribeToVariable var action = do
         SM.lookup var runtimeVariables >>= maybe mempty (insert idAction . subscribers)
     return idAction
 
-updateValue :: Variable -> Text -> MercuryRuntime ()
+updateValue :: Variable -> Text -> MercuryRuntime b ()
 updateValue var val = do
     RuntimeEnvironment{..} <- ask
     oldRuntimeVariable <-
@@ -102,22 +104,22 @@ updateValue var val = do
                 traverse_ snd subs
     maybe mempty hook oldRuntimeVariable
 
-newtype MercuryRuntime a = MercuryRuntime (ReaderT RuntimeEnvironment IO a)
-    deriving (Functor, Applicative, Monad, MonadFail, MonadIO, MonadReader RuntimeEnvironment, MonadUnliftIO)
+newtype MercuryRuntime b a = MercuryRuntime (ReaderT (RuntimeEnvironment b) IO a)
+    deriving (Functor, Applicative, Monad, MonadFail, MonadIO, MonadReader (RuntimeEnvironment b), MonadUnliftIO)
 
-instance (Semigroup a) => Semigroup (MercuryRuntime a) where
+instance (Semigroup a) => Semigroup (MercuryRuntime b a) where
     (<>) = liftA2 (<>)
 
-instance (Monoid a) => Monoid (MercuryRuntime a) where
+instance (Monoid a) => Monoid (MercuryRuntime b a) where
     mempty = pure mempty
 
-runMercuryRuntime :: MercuryRuntime a -> RuntimeEnvironment -> IO a
+runMercuryRuntime :: MercuryRuntime b a -> RuntimeEnvironment b -> IO a
 runMercuryRuntime (MercuryRuntime m) = runReaderT m
 
-getValue :: Variable -> MercuryRuntime Text
+getValue :: Variable -> MercuryRuntime b Text
 getValue v = do
     vars <- asks runtimeVariables
     ioa $ maybe "" variableValue <$> SM.lookup v vars
 
-evalExpression :: Expression a -> MercuryRuntime a
+evalExpression :: Expression a -> MercuryRuntime b a
 evalExpression Expression{..} = eval getValue

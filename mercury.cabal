@@ -28,8 +28,8 @@ library
     exposed-modules:
           Mercury.DevMain
         , Mercury.Runtime
-        , Mercury.Runtime.Rendering.Handle
-        , Mercury.Runtime.Gtk
+        , Mercury.Runtime.Rendering.Backend
+        , Mercury.Runtime.Rendering.Gtk
         , Mercury.Runtime.Identified
         , Mercury.Variable
         , Mercury.Widget

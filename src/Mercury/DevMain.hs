@@ -7,14 +7,16 @@
 -- opaque and hide the reliance on Text to identify variables.
 -- - Add a logging system
 -- - Handle errors better, especially decoding variable values
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Mercury.DevMain (update) where
@@ -40,9 +42,10 @@ import GHC.IO.FD (FD (fdFD))
 import qualified GI.GLib as GLib
 import qualified GI.Gtk as Gtk
 import Mercury.Runtime
-import qualified Mercury.Runtime.Gtk as MGtk
 import Mercury.Runtime.Identified (Identified, newStoreIO)
-import qualified Mercury.Runtime.Rendering.Handle as Render
+import Mercury.Runtime.Rendering.Backend hiding (Widget)
+import qualified Mercury.Runtime.Rendering.Backend as R
+import Mercury.Runtime.Rendering.Gtk
 import Mercury.Variable
 import Mercury.Widget
 import qualified StmContainers.Map as SM
@@ -69,10 +72,10 @@ myWidget =
             ]
         }
 
-updateVariableValue :: Variable -> Text -> MercuryRuntime ()
+updateVariableValue :: Variable -> Text -> MercuryRuntime b ()
 updateVariableValue = updateValue
 
-setupVariable :: Variable -> MercuryRuntime ()
+setupVariable :: Variable -> MercuryRuntime b ()
 setupVariable v@Variable{..} = do
     case runtimeBehavior of
         Polling{..} -> do
@@ -92,15 +95,17 @@ activate :: Gtk.Application -> IO ()
 activate app = do
     runtimeVariables <- SM.newIO
     uidStore <- newStoreIO
+    let renderingBackend = GtkBackend
     runMercuryRuntime (activate' app) (RuntimeEnvironment{..})
 
-activate' :: Gtk.Application -> MercuryRuntime ()
+activate' :: Gtk.Application -> MercuryRuntime GtkBackend ()
 activate' app = do
     let allVars = getAllVars myWidget
     traverse_ addVariable (S.toList allVars)
     traverse_ setupVariable (S.toList allVars)
 
-    widget <- render MGtk.handle myWidget
+    widget <- render myWidget
+    -- call present
 
     window <-
         new
@@ -113,7 +118,7 @@ activate' app = do
             ]
     #present window
 
-runPollingAction :: PollingAction -> MercuryRuntime Text
+runPollingAction :: PollingAction -> MercuryRuntime b Text
 runPollingAction (PollingCustomIO io) = liftIO io
 runPollingAction (PollingScriptAction (Script path args)) = do
     output <- liftIO $ readProcess path args ""
@@ -146,8 +151,8 @@ cpuAnd100 =
         uText <- (#) cpuUsage
         pure $ fromMaybe 0 (readText @Int uText)
 
--- TODO collapse [Identified (MercuryRuntime ())] into Identified (MercuryRuntime ())
-mountExpression :: Expression a -> (a -> MercuryRuntime ()) -> MercuryRuntime [Identified (MercuryRuntime ())]
+-- TODO collapse [Identified (MercuryRuntime b ())] into Identified (MercuryRuntime b ())
+mountExpression :: Expression a -> (a -> MercuryRuntime b ()) -> MercuryRuntime b [Identified (MercuryRuntime b ())]
 mountExpression expr onChange =
     traverse
         ( \var ->
@@ -155,24 +160,20 @@ mountExpression expr onChange =
         )
         (S.toList (dependencies expr))
 
-render ::
-    Render.Handle MercuryRuntime widget box label button ->
-    Widget ->
-    MercuryRuntime widget
-render h@Render.Handle{..} = \case
-    Label{..} -> do
-        textValue <- evalExpression text
-        labelWidget <- renderLabel textValue
-        unless (isStatic text) (void $ mountExpression text (setLabelText labelWidget))
-        labelToWidget labelWidget
-    Box{..} -> do
-        renderedChildren <- traverse (render h) children
-        boxWidget <- renderBox spaceEvenly renderedChildren
-        boxToWidget boxWidget
-    Button{..} -> do
-        renderedChild <- render h child
-        buttonWidget <- renderButton renderedChild
-        buttonToWidget buttonWidget
+render :: forall b. (RenderingBackend b) => Widget -> MercuryRuntime b (R.Widget b)
+render Label{..} = do
+    textValue <- evalExpression text
+    labelWidget <- renderLabel @b textValue
+    unless (isStatic text) (void $ mountExpression text (setLabelText @b labelWidget))
+    labelToWidget @b labelWidget
+render Box{..} = do
+    renderedChildren <- traverse (render @b) children
+    boxWidget <- renderBox @b spaceEvenly renderedChildren
+    boxToWidget @b boxWidget
+render Button{..} = do
+    renderedChild <- render @b child
+    buttonWidget <- renderButton @b renderedChild
+    buttonToWidget @b buttonWidget
 
 update :: IO ()
 update = do
