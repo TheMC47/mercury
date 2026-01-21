@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Mercury.Widget where
+module Mercury.Widget (getAllVars, Widget (..), isStatic, use, (#), Expression (eval, dependencies)) where
 
 import Control.Monad.Identity
 import Data.Function (on)
@@ -39,7 +39,7 @@ isStatic :: Expression a -> Bool
 isStatic e = S.null (dependencies e)
 
 use :: Variable -> Expression Text
-use v@(Variable{..}) =
+use v =
     Expression
         { dependencies = S.singleton v
         , eval = ($ v) -- Just apply it

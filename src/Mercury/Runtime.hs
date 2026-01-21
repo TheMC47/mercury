@@ -122,4 +122,4 @@ getValue v = do
     ioa $ maybe "" variableValue <$> SM.lookup v vars
 
 evalExpression :: Expression a -> MercuryRuntime b a
-evalExpression Expression{..} = eval getValue
+evalExpression e = eval e getValue

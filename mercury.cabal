@@ -33,6 +33,7 @@ library
         , Mercury.Runtime.Identified
         , Mercury.Variable
         , Mercury.Widget
+        , Mercury.Window
 
     build-depends:
           base ^>=4.18.3.0
@@ -49,6 +50,7 @@ library
         , stm-containers
         , hashable
         , mtl
+        , data-default
         , focus
         , list-t
         , unliftio
