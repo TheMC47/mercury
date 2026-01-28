@@ -3,7 +3,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Mercury.Runtime (
     RuntimeEnvironment (..),
@@ -17,6 +20,8 @@ module Mercury.Runtime (
     updateValue,
     subscribeToVariable,
     ioa,
+    closeWindows,
+    startApplication,
 ) where
 
 import Control.Concurrent.STM
@@ -31,6 +36,7 @@ import Data.Function
 import Data.Functor
 import Data.GI.Base (AttrOp (On, (:=)), new, set)
 import Data.Hashable
+import Data.IORef
 import Data.List (nubBy)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe)
@@ -38,6 +44,7 @@ import Data.Monoid (Ap)
 import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
+import Debug.Trace (traceM)
 import qualified Focus as F
 import GHC.IO.FD (FD (fdFD))
 import qualified GI.GLib as GLib
@@ -49,7 +56,7 @@ import Mercury.Variable
 import Mercury.Widget
 import qualified StmContainers.Map as SM
 import qualified StmContainers.Set as SS
-import UnliftIO (MonadUnliftIO)
+import UnliftIO (IORef, MonadUnliftIO)
 
 data RuntimeVariable b = RuntimeVariable
     { variableValue :: !Text
@@ -67,7 +74,23 @@ data RuntimeEnvironment b = (RenderingBackend b) =>
     { runtimeVariables :: !(SM.Map Variable (RuntimeVariable b))
     , uidStore :: !UniqueIDStore
     , renderingBackend :: !b
+    , applicationInstance :: !(IORef (Maybe (Application b)))
     }
+
+startApplication :: forall b. (RenderingBackend b) => MercuryRuntime b (Application b)
+startApplication = do
+    app <- liftIO $ createApplication @b "com.example.mercuryapp"
+    applicationInstanceRef <- asks applicationInstance
+    liftIO $ writeIORef applicationInstanceRef (Just app)
+    return app
+
+withApplication :: (Application b -> MercuryRuntime b a) -> MercuryRuntime b (Maybe a)
+withApplication action = do
+    appM <- liftIO . readIORef =<< asks applicationInstance
+    mapM action appM
+
+closeWindows :: forall b. (RenderingBackend b) => MercuryRuntime b ()
+closeWindows = void $ withApplication (\(app :: Application b) -> killAllWindows @b app)
 
 withUID :: a -> MercuryRuntime b (Identified a)
 withUID a =

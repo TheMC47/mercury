@@ -3,6 +3,7 @@
 
 module Mercury.Widget (getAllVars, Widget (..), isStatic, use, (#), Expression (eval, dependencies)) where
 
+import Control.Monad.IO.Class
 import Control.Monad.Identity
 import Data.Function (on)
 import Data.List (nubBy)
@@ -11,23 +12,25 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Set as S
 import Data.Text (Text)
 import Mercury.Variable
+import UnliftIO (MonadUnliftIO)
 
-getAllVars :: Widget -> S.Set Variable
+getAllVars :: Widget m -> S.Set Variable
 getAllVars (Label{..}) = dependencies text
 getAllVars (Box{..}) =
     S.unions $ map getAllVars children
 getAllVars (Button{..}) = getAllVars child
 
-data Widget
+data Widget m
     = Box
         { spaceEvenly :: !Bool
-        , children :: ![Widget]
+        , children :: ![Widget m]
         }
     | Label
         { text :: !(Expression Text)
         }
     | Button
-        { child :: !Widget
+        { child :: !(Widget m)
+        , onClick :: !(m ())
         }
 
 data Expression a = Expression

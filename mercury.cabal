@@ -40,6 +40,8 @@ library
         , gi-gtk4 == 4.*
         , gi-glib == 2.0.30
         , gi-gio == 2.0.35
+        , gi-gdk4
+        , gi-gdkx11
         , haskell-gi-base
         , text
         , process
@@ -54,6 +56,7 @@ library
         , focus
         , list-t
         , unliftio
+        , X11
     hs-source-dirs:   src
     default-language: Haskell2010
 

@@ -28,6 +28,7 @@ import Control.Monad.Trans.Reader (ReaderT (..))
 import Control.Monad.Trans.Writer (WriterT, runWriterT, tell)
 import Data.Default
 import Data.Foldable
+import Data.IORef
 import Data.List (nubBy)
 import qualified Data.Map.Strict as M
 import Data.Maybe
@@ -36,6 +37,7 @@ import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
+import Debug.Trace
 import Mercury.Runtime
 import Mercury.Runtime.Identified (Identified, newStoreIO)
 import Mercury.Runtime.Rendering.Backend hiding (Widget, Window, renderWindow)
@@ -48,15 +50,15 @@ import qualified StmContainers.Map as SM
 import System.IO
 import System.Process
 import Text.Read (readMaybe)
-import UnliftIO (askRunInIO)
+import UnliftIO (IORef, MonadUnliftIO, askRunInIO)
 import UnliftIO.Concurrent
 
 -- Config-----------------------------------------------------------------------
-myWindow :: Window
+myWindow :: (R.RenderingBackend b) => Window (MercuryRuntime b)
 myWindow =
     Window
         { rootWidget = myWidget
-        , geometry = def{width = Just 400, height = Just 200}
+        , geometry = def{width = Just 400, height = Just 200, position = Just (100, 500)}
         , title = "Mercury GTK Example"
         }
 
@@ -71,7 +73,7 @@ cpuUsage :: Variable
 cpuUsage =
     Variable
         { name = "cpu_usage"
-        , runtimeBehavior = Polling 2000 (PollingCustomIO (return "42"))
+        , runtimeBehavior = Polling 2000 (PollingCustomIO (return "72"))
         }
 
 xpropSpy :: Variable
@@ -98,7 +100,7 @@ mountExpression expr onChange =
         )
         (S.toList (dependencies expr))
 
-render :: forall b. (RenderingBackend b) => Widget -> MercuryRuntime b (R.Widget b)
+render :: forall b. (RenderingBackend b) => (Widget (MercuryRuntime b)) -> MercuryRuntime b (R.Widget b)
 render Label{..} = do
     textValue <- evalExpression text
     labelWidget <- renderLabel @b textValue
@@ -110,10 +112,10 @@ render Box{..} = do
     boxToWidget @b boxWidget
 render Button{..} = do
     renderedChild <- render @b child
-    buttonWidget <- renderButton @b renderedChild
+    buttonWidget <- renderButton @b renderedChild onClick
     buttonToWidget @b buttonWidget
 
-renderWindow :: forall b. (RenderingBackend b) => R.Application b -> Window -> MercuryRuntime b (R.Window b)
+renderWindow :: forall b. (RenderingBackend b) => R.Application b -> Window (MercuryRuntime b) -> MercuryRuntime b (R.Window b)
 renderWindow app Window{..} = do
     widget <- render @b rootWidget
     R.renderWindow @b app widget geometry title
@@ -123,11 +125,11 @@ update = activate
 
 activate' :: forall b. (RenderingBackend b) => MercuryRuntime b ()
 activate' = do
-    let allVars = getAllVars myWidget
+    app <- startApplication @b
+
+    let allVars = getAllVars (myWidget @b)
     traverse_ addVariable (S.toList allVars)
     traverse_ setupVariable (S.toList allVars)
-
-    app <- createApplication @b "haskell-gi.example"
 
     onApplicationActivate @b app $ do
         void $ renderWindow @b app myWindow
@@ -145,13 +147,16 @@ tshow = T.pack . show
 readText :: (Read a) => Text -> Maybe a
 readText = readMaybe . T.unpack
 
-myWidget :: Widget
+myWidget :: (R.RenderingBackend b) => Widget (MercuryRuntime b)
 myWidget =
     Box
         { spaceEvenly = True
         , children =
             [ Label{text = (#) timestampVar}
-            , Button{child = Box{spaceEvenly = False, children = [Label{text = tshow <$> cpuAnd100}]}}
+            , Button
+                { child = Box{spaceEvenly = False, children = [Label{text = tshow <$> cpuAnd100}]}
+                , onClick = closeWindows
+                }
             , Label{text = (#) xpropSpy}
             ]
         }
@@ -180,4 +185,5 @@ activate = do
     runtimeVariables <- SM.newIO
     uidStore <- newStoreIO
     let renderingBackend = GtkBackend
+    applicationInstance <- newIORef Nothing
     runMercuryRuntime activate' (RuntimeEnvironment{..})

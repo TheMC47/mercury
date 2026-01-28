@@ -4,17 +4,18 @@ import Data.Default (Default (def))
 import Data.Text (Text)
 import Mercury.Widget (Widget)
 
-data Window = Window
-    { rootWidget :: !Widget
+data Window m = Window
+    { rootWidget :: !(Widget m)
     , geometry :: !Geometry
     , title :: !Text
     }
 
+type Position = (Int, Int)
+
 data Geometry = Geometry
     { width :: !(Maybe Int)
     , height :: !(Maybe Int)
-    , x :: !(Maybe Int)
-    , y :: !(Maybe Int)
+    , position :: !(Maybe Position)
     , anchor :: !Anchor
     }
 
@@ -23,8 +24,7 @@ instance Default Geometry where
         Geometry
             { width = Nothing
             , height = Nothing
-            , x = Nothing
-            , y = Nothing
+            , position = Nothing
             , anchor = TopCenter
             }
 

@@ -19,7 +19,7 @@ class RenderingBackend b where
 
     renderBox :: (MonadIO m) => Bool -> [Widget b] -> m (Box b)
     renderLabel :: (MonadIO m) => Text -> m (Label b)
-    renderButton :: (MonadIO m) => Widget b -> m (Button b)
+    renderButton :: (MonadUnliftIO m) => Widget b -> m () -> m (Button b)
     renderWindow :: (MonadIO m) => Application b -> Widget b -> Geometry -> Text -> m (Window b)
 
     setLabelText :: (MonadIO m) => Label b -> Text -> m ()
@@ -27,7 +27,10 @@ class RenderingBackend b where
     createApplication :: (MonadIO m) => Text -> m (Application b)
     onApplicationActivate :: (MonadUnliftIO m) => Application b -> m () -> m ()
     runApplication :: (MonadIO m) => Application b -> m ()
+    killAllWindows :: (MonadIO m) => Application b -> m ()
 
     labelToWidget :: (MonadIO m) => Label b -> m (Widget b)
     boxToWidget :: (MonadIO m) => Box b -> m (Widget b)
     buttonToWidget :: (MonadIO m) => Button b -> m (Widget b)
+
+    idleAdd :: (MonadUnliftIO m) => m () -> m ()
