@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-deprecations #-}
 
@@ -13,6 +14,7 @@ import Data.Foldable (traverse_)
 import Data.Functor
 import Data.GI.Base
 import Data.GI.Base.Overloading (IsDescendantOf)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Debug.Trace
 import Foreign (castPtr)
 import GI.GLib (ioAddWatch)
@@ -23,6 +25,7 @@ import GI.Gdk.Objects.Surface
 import qualified GI.GdkX11 as GdkX11
 import qualified GI.Gtk as Gtk
 import qualified Graphics.X11 as X11
+import Graphics.X11.Xinerama (getScreenInfo)
 import Graphics.X11.Xlib.Extras as X11
 import Mercury.Runtime
 import Mercury.Runtime.Rendering.Backend
@@ -75,7 +78,7 @@ instance RenderingBackend GtkBackend where
                 , #defaultWidth := maybe (-1) fromIntegral (width geom)
                 , #defaultHeight := maybe (-1) fromIntegral (height geom)
                 ]
-        maybe (return ()) (setMoveWindow win) (position geom)
+        setMoveWindow win (screen geom) (position geom)
         #present win
         return win
 
@@ -83,31 +86,41 @@ instance RenderingBackend GtkBackend where
         ioAction <- toIO action
         void $ GLib.idleAdd GLib.PRIORITY_DEFAULT_IDLE (ioAction $> False)
 
-setMoveWindow :: (MonadIO m) => Gtk.Window -> Position -> m ()
-setMoveWindow win (x, y) = void $ on win #realize $ do
-    result <- runExceptT (setMoveWindow' win (x, y))
-    case result of
-        Left err -> error ("setMoveWindow error: " ++ err)
-        Right () -> return ()
+setMoveWindow :: (MonadUnliftIO m) => Gtk.Window -> Int -> Position -> m ()
+setMoveWindow win screenIdx (x, y) = void $ on win #realize $ do
+    withX11Window win $ \winID dpy -> do
+        -- TODO add window type
+        wmWindowType <- X11.internAtom dpy "_NET_WM_WINDOW_TYPE" False
+        typeDock <- X11.internAtom dpy "_NET_WM_WINDOW_TYPE_DOCK" False
+        X11.changeProperty32 dpy winID wmWindowType X11.aTOM X11.propModeReplace [fromIntegral typeDock]
+        screenInfos <- liftIO $ getScreenInfo dpy
+        let scrrenInfo = listToMaybe [screenInfos !! screenIdx | screenIdx >= 0, screenIdx < length screenInfos]
+        let move = X11.moveWindow dpy winID
+        flip (maybe (move (fromIntegral x) (fromIntegral y))) scrrenInfo $ \X11.Rectangle{..} -> do
+            move (rect_x + fromIntegral x) (rect_y + fromIntegral y)
+        X11.flush dpy
 
-setMoveWindow' :: (MonadIO m) => Gtk.Window -> Position -> ExceptT String m ()
-setMoveWindow' win (x, y) = do
+withX11Window :: (MonadUnliftIO m) => Gtk.Window -> (X11.Window -> X11.Display -> m a) -> m a
+withX11Window win action =
+    withXID win $ withX11Display . action
+
+withXID :: (MonadUnliftIO m) => Gtk.Window -> (X11.Window -> m a) -> m a
+withXID win action = do
     maybeSurface <- #getSurface win
-    maybeX11Surface <- maybe (throwE "No surface available") (liftIO . castTo GdkX11.X11Surface) maybeSurface
-    x11Surface <- maybe (throwE "Not an X11 surface") return maybeX11Surface
-    gdkDisplay <- #getDisplay x11Surface
-    maybeX11Display <- liftIO $ castTo GdkX11.X11Display gdkDisplay
-    display <- maybe (throwE "Not an X11 display") return maybeX11Display
-    x11Display <- GdkX11.x11DisplayGetXdisplay display
+    maybeX11Surface <- maybe (error "No surface available") (liftIO . castTo GdkX11.X11Surface) maybeSurface
+    x11Surface <- maybe (error "Not an X11 surface") return maybeX11Surface
+    xid <- GdkX11.x11SurfaceGetXid x11Surface
+    let winID = fromIntegral xid :: X11.Window
+    action winID
+
+withX11Display :: (MonadUnliftIO m) => (X11.Display -> m a) -> m a
+withX11Display action = do
+    uio <- askRunInIO
+    maybeDisplay <- Gdk.displayGetDefault
+    display <- maybe (error "No default GDK display") return maybeDisplay
+    maybeX11Display <- liftIO $ castTo GdkX11.X11Display display
+    x11Display <- maybe (error "Not an X11 display") return maybeX11Display
+    x11Dpy <- GdkX11.x11DisplayGetXdisplay x11Display
     liftIO $
-        withManagedPtr x11Display $ \x11DisplayPtr -> do
-            let dpy = X11.Display (castPtr x11DisplayPtr)
-            xid <- GdkX11.x11SurfaceGetXid x11Surface
-            let winID = fromIntegral xid :: X11.Window
-            -- TODO add window type
-            wmWindowType <- X11.internAtom dpy "_NET_WM_WINDOW_TYPE" False
-            typeDock <- X11.internAtom dpy "_NET_WM_WINDOW_TYPE_DOCK" False
-            X11.changeProperty32 dpy winID wmWindowType X11.aTOM X11.propModeReplace [fromIntegral typeDock]
-            X11.moveWindow dpy winID (fromIntegral x) (fromIntegral y)
-            X11.flush dpy
-    return ()
+        withManagedPtr x11Dpy $ \x11DisplayPtr ->
+            uio $ action (X11.Display (castPtr x11DisplayPtr))

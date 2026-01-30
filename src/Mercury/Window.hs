@@ -15,8 +15,9 @@ type Position = (Int, Int)
 data Geometry = Geometry
     { width :: !(Maybe Int)
     , height :: !(Maybe Int)
-    , position :: !(Maybe Position)
+    , position :: !Position
     , anchor :: !Anchor
+    , screen :: !Int
     }
 
 instance Default Geometry where
@@ -24,8 +25,9 @@ instance Default Geometry where
         Geometry
             { width = Nothing
             , height = Nothing
-            , position = Nothing
+            , position = (0, 0)
             , anchor = TopCenter
+            , screen = 0
             }
 
 data Anchor

@@ -37,6 +37,7 @@ import qualified Data.Set as S
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time
+import Data.Time.Clock.POSIX
 import Debug.Trace
 import Mercury.Runtime
 import Mercury.Runtime.Identified (Identified, newStoreIO)
@@ -58,7 +59,13 @@ myWindow :: (R.RenderingBackend b) => Window (MercuryRuntime b)
 myWindow =
     Window
         { rootWidget = myWidget
-        , geometry = def{width = Just 400, height = Just 200, position = Just (100, 500)}
+        , geometry =
+            def
+                { width = Just 100
+                , height = Just 10
+                , position = (26, 26)
+                , screen = 1
+                }
         , title = "Mercury GTK Example"
         }
 
@@ -100,7 +107,7 @@ mountExpression expr onChange =
         )
         (S.toList (dependencies expr))
 
-render :: forall b. (RenderingBackend b) => (Widget (MercuryRuntime b)) -> MercuryRuntime b (R.Widget b)
+render :: forall b. (RenderingBackend b) => Widget (MercuryRuntime b) -> MercuryRuntime b (R.Widget b)
 render Label{..} = do
     textValue <- evalExpression text
     labelWidget <- renderLabel @b textValue
@@ -125,6 +132,8 @@ update = activate
 
 activate' :: forall b. (RenderingBackend b) => MercuryRuntime b ()
 activate' = do
+    time <- liftIO getPOSIXTime
+    liftIO $ putStrLn $ "Application started at POSIX time: " ++ show time
     app <- startApplication @b
 
     let allVars = getAllVars (myWidget @b)
@@ -133,6 +142,7 @@ activate' = do
 
     onApplicationActivate @b app $ do
         void $ renderWindow @b app myWindow
+        liftIO $ putStrLn $ "Render finished" ++ show time
     runApplication @b app
 
 runPollingAction :: PollingAction -> MercuryRuntime b Text

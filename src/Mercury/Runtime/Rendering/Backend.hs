@@ -20,7 +20,7 @@ class RenderingBackend b where
     renderBox :: (MonadIO m) => Bool -> [Widget b] -> m (Box b)
     renderLabel :: (MonadIO m) => Text -> m (Label b)
     renderButton :: (MonadUnliftIO m) => Widget b -> m () -> m (Button b)
-    renderWindow :: (MonadIO m) => Application b -> Widget b -> Geometry -> Text -> m (Window b)
+    renderWindow :: (MonadUnliftIO m) => Application b -> Widget b -> Geometry -> Text -> m (Window b)
 
     setLabelText :: (MonadIO m) => Label b -> Text -> m ()
 

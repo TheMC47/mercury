@@ -22,6 +22,9 @@ common warnings
         -Wno-unused-imports
         -Wno-unused-packages
         -Wredundant-constraints
+        -threaded
+        -rtsopts
+        -with-rtsopts=-N
 
 library
     import:           warnings
