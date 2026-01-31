@@ -1,5 +1,5 @@
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-deprecations #-}
@@ -7,33 +7,22 @@
 module Mercury.Runtime.Rendering.Gtk (GtkBackend (..)) where
 
 import Control.Monad
-import Control.Monad.Except (ExceptT)
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.Except
 import Data.Foldable (traverse_)
 import Data.Functor
 import Data.GI.Base
-import Data.GI.Base.Overloading (IsDescendantOf)
-import Data.Maybe (fromMaybe, listToMaybe)
-import Debug.Trace
+import Data.Maybe (listToMaybe)
 import Foreign (castPtr)
-import GI.GLib (ioAddWatch)
-import qualified GI.GLib as GLib
-import qualified GI.Gdk as Gdk
-import GI.Gdk.Objects.Display
+import GI.GLib qualified as GLib
+import GI.Gdk qualified as Gdk
 import GI.Gdk.Objects.Surface
-import qualified GI.GdkX11 as GdkX11
-import qualified GI.Gtk as Gtk
-import qualified Graphics.X11 as X11
+import GI.GdkX11 qualified as GdkX11
+import GI.Gtk qualified as Gtk
+import Graphics.X11 qualified as X11
 import Graphics.X11.Xinerama (getScreenInfo)
 import Graphics.X11.Xlib.Extras as X11
-import Mercury.Runtime
 import Mercury.Runtime.Rendering.Backend
-import Mercury.Window
 import Mercury.Window.Geometry
-import System.Exit (exitSuccess)
 import UnliftIO
-import UnliftIO.Concurrent
 
 data GtkBackend = GtkBackend
 
@@ -59,8 +48,9 @@ instance RenderingBackend GtkBackend where
     buttonToWidget (MkButton b) = MkWidget <$> Gtk.toWidget b
 
     createApplication appId = MkApplication <$> new Gtk.Application [#applicationId := appId]
-    onApplicationActivate (MkApplication app) action =
-        toIO action >>= void . Gtk.on app #activate
+    onApplicationActivate (MkApplication app) action = do
+        a <- toIO action
+        void $ Gtk.on app #activate a
 
     runApplication (MkApplication app) = void $ #run app Nothing
     killAllWindows (MkApplication app) = do

@@ -1,8 +1,13 @@
-module Mercury.Variable where
+module Mercury.Variable (
+    Variable (..),
+    ScriptAction (..),
+    PollingAction (..),
+    SubscriptionAction (..),
+    RuntimeBehavior (..),
+) where
 
 import Data.Function
 import Data.Hashable
-import qualified Data.Map.Strict as M
 import Data.Text (Text)
 
 data Variable = Variable

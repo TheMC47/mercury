@@ -7,49 +7,34 @@
 -- opaque and hide the reliance on Text to identify variables.
 -- - Add a logging system
 -- - Handle errors better, especially decoding variable values
-{-# LANGUAGE ApplicativeDo #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Mercury.DevMain (update) where
 
-import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Reader (MonadReader, ask, asks)
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Reader (ReaderT (..))
-import Control.Monad.Trans.Writer (WriterT, runWriterT, tell)
 import Data.Default
 import Data.Foldable
 import Data.IORef
-import Data.List (nubBy)
-import qualified Data.Map.Strict as M
-import Data.Maybe
-import Data.Monoid (Ap)
-import qualified Data.Set as S
+import Data.Set qualified as S
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Text qualified as T
 import Data.Time
 import Data.Time.Clock.POSIX
-import Debug.Trace
 import Mercury.Runtime
 import Mercury.Runtime.Identified (Identified, newStoreIO)
 import Mercury.Runtime.Rendering.Backend hiding (Widget, Window, renderWindow)
-import qualified Mercury.Runtime.Rendering.Backend as R
+import Mercury.Runtime.Rendering.Backend qualified as R
 import Mercury.Runtime.Rendering.Gtk
 import Mercury.Variable
 import Mercury.Variable.Typed
 import Mercury.Widget
 import Mercury.Window
 import Mercury.Window.Geometry
-import qualified StmContainers.Map as SM
+import StmContainers.Map qualified as SM
 import System.IO
 import System.Process
-import UnliftIO (IORef, MonadUnliftIO, askRunInIO)
 import UnliftIO.Concurrent
 
 -- Config-----------------------------------------------------------------------

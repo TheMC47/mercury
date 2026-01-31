@@ -1,9 +1,4 @@
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Mercury.Runtime (
@@ -29,36 +24,20 @@ import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader (MonadReader, ask, asks)
-import Control.Monad.State (MonadState, StateT (runStateT), evalStateT, get, gets, modify, put)
 import Control.Monad.Trans.Reader (ReaderT (..))
-import Control.Monad.Trans.Writer
 import Data.Foldable
-import Data.Function
-import Data.Functor
-import Data.GI.Base (AttrOp (On, (:=)), new, set)
 import Data.Hashable
 import Data.IORef
-import Data.List (nubBy)
-import qualified Data.Map.Strict as M
-import Data.Maybe (fromMaybe)
-import Data.Monoid (Ap)
-import qualified Data.Set as S
 import Data.Text (Text)
-import qualified Data.Text as T
-import Debug.Trace (traceM)
-import qualified Focus as F
-import GHC.IO.FD (FD (fdFD))
-import qualified GI.GLib as GLib
-import qualified GI.Gtk as Gtk
-import qualified ListT as LT
+import Focus qualified as F
+import ListT qualified as LT
+import Mercury.Expression
 import Mercury.Runtime.Identified
 import Mercury.Runtime.Rendering.Backend
 import Mercury.Variable
 import Mercury.Variable.Typed
-import Mercury.Expression
-import qualified StmContainers.Map as SM
-import qualified StmContainers.Set as SS
-import UnliftIO (IORef, MonadUnliftIO)
+import StmContainers.Map qualified as SM
+import UnliftIO (MonadUnliftIO)
 
 data RuntimeVariable b = RuntimeVariable
     { variableValue :: !Text

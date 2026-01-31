@@ -1,5 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module Mercury.Runtime.Identified (
     Identified,
     UniqueID,
