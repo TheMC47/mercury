@@ -31,3 +31,4 @@ data SubscriptionAction
 data RuntimeBehavior
     = Polling {intervalMs :: !Int, action :: !PollingAction}
     | Subscription {script :: !SubscriptionAction}
+    | Pure {initialValue :: !Text}

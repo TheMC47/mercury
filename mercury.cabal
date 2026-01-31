@@ -35,6 +35,7 @@ library
         , Mercury.Runtime.Rendering.Gtk
         , Mercury.Runtime.Identified
         , Mercury.Variable
+        , Mercury.Variable.Typed
         , Mercury.Widget
         , Mercury.Window
 

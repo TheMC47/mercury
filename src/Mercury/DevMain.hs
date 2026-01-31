@@ -45,12 +45,12 @@ import Mercury.Runtime.Rendering.Backend hiding (Widget, Window, renderWindow)
 import qualified Mercury.Runtime.Rendering.Backend as R
 import Mercury.Runtime.Rendering.Gtk
 import Mercury.Variable
+import Mercury.Variable.Typed
 import Mercury.Widget
 import Mercury.Window
 import qualified StmContainers.Map as SM
 import System.IO
 import System.Process
-import Text.Read (readMaybe)
 import UnliftIO (IORef, MonadUnliftIO, askRunInIO)
 import UnliftIO.Concurrent
 
@@ -69,32 +69,17 @@ myWindow =
         , title = "Mercury GTK Example"
         }
 
-timestampVar :: Variable
-timestampVar =
-    Variable
-        { name = "current_time"
-        , runtimeBehavior = Polling 1000 (PollingCustomIO (tshow <$> getCurrentTime))
-        }
+timestampVar :: TypedVariable Text
+timestampVar = pollingVar "current_time" 1000 (tshow <$> getCurrentTime)
 
-cpuUsage :: Variable
-cpuUsage =
-    Variable
-        { name = "cpu_usage"
-        , runtimeBehavior = Polling 2000 (PollingCustomIO (return "72"))
-        }
+cpuUsage :: TypedVariable Int
+cpuUsage = pollingVar "cpu_usage" 2000 (return 72)
 
-xpropSpy :: Variable
-xpropSpy =
-    Variable
-        { name = "xprop_spy"
-        , runtimeBehavior = Subscription (SubscriptionScriptAction (Script "xprop" ["-root", "-spy", "_NET_ACTIVE_WINDOW"]))
-        }
+xpropSpy :: TypedVariable Text
+xpropSpy = subscriptionVar "xprop_spy" (SubscriptionScriptAction (Script "xprop" ["-root", "-spy", "_NET_ACTIVE_WINDOW"]))
 
 cpuAnd100 :: Expression Int
-cpuAnd100 =
-    do
-        uText <- (#) cpuUsage
-        pure $ fromMaybe 0 (readText @Int uText)
+cpuAnd100 = useOr 0 cpuUsage
 
 -- Plumbing --------------------------------------------------------------------
 
@@ -154,9 +139,6 @@ runPollingAction (PollingScriptAction (Script path args)) = do
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
 
-readText :: (Read a) => Text -> Maybe a
-readText = readMaybe . T.unpack
-
 myWidget :: (R.RenderingBackend b) => Widget (MercuryRuntime b)
 myWidget =
     Box
@@ -166,6 +148,11 @@ myWidget =
             , Button
                 { child = Box{spaceEvenly = False, children = [Label{text = tshow <$> cpuAnd100}]}
                 , onClick = closeWindows
+                }
+            , Button
+                { child = Label{text = pure "Increment"}
+                , onClick = void $ withTypedValue cpuUsage $ \c ->
+                    updateTypedValue cpuUsage (c + 1)
                 }
             , Label{text = (#) xpropSpy}
             ]
@@ -189,6 +176,7 @@ setupVariable v@Variable{..} = do
             void $ forkIO $ forever $ do
                 line <- liftIO $ hGetLine hout
                 updateVariableValue v (T.pack line)
+        Pure{} -> pure ()
 
 activate :: IO ()
 activate = do

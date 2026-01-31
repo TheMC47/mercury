@@ -1,18 +1,23 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Mercury.Widget (getAllVars, Widget (..), isStatic, use, (#), Expression (eval, dependencies)) where
+module Mercury.Widget (
+    getAllVars,
+    Widget (..),
+    isStatic,
+    useRaw,
+    use,
+    useOr,
+    (#),
+    Expression (eval, dependencies),
+) where
 
-import Control.Monad.IO.Class
-import Control.Monad.Identity
-import Data.Function (on)
-import Data.List (nubBy)
-import qualified Data.Map.Strict as M
-import Data.Maybe (fromMaybe)
+import Data.Maybe
 import qualified Data.Set as S
 import Data.Text (Text)
 import Mercury.Variable
-import UnliftIO (MonadUnliftIO)
+import Mercury.Variable.Typed
 
 getAllVars :: Widget m -> S.Set Variable
 getAllVars (Label{..}) = dependencies text
@@ -41,15 +46,21 @@ data Expression a = Expression
 isStatic :: Expression a -> Bool
 isStatic e = S.null (dependencies e)
 
-use :: Variable -> Expression Text
-use v =
+useRaw :: Variable -> Expression Text
+useRaw v =
     Expression
         { dependencies = S.singleton v
-        , eval = ($ v) -- Just apply it
+        , eval = ($ v)
         }
 
-(#) :: Variable -> Expression Text
-(#) = use
+use :: TypedVariable a -> Expression (Maybe a)
+use tv = decode tv <$> useRaw (rawVariable tv)
+
+useOr :: a -> TypedVariable a -> Expression a
+useOr fallback tv = fromMaybe fallback <$> use tv
+
+(#) :: TypedVariable Text -> Expression Text
+(#) = useOr ""
 infixl 9 #
 
 instance Functor Expression where

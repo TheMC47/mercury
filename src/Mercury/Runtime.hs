@@ -18,6 +18,9 @@ module Mercury.Runtime (
     addVariable,
     getValue,
     updateValue,
+    updateTypedValue,
+    withTypedValue,
+    getTypedValue,
     subscribeToVariable,
     ioa,
     closeWindows,
@@ -53,6 +56,7 @@ import qualified ListT as LT
 import Mercury.Runtime.Identified
 import Mercury.Runtime.Rendering.Backend
 import Mercury.Variable
+import Mercury.Variable.Typed
 import Mercury.Widget
 import qualified StmContainers.Map as SM
 import qualified StmContainers.Set as SS
@@ -101,7 +105,10 @@ addVariable :: Variable -> MercuryRuntime b ()
 addVariable v = do
     vars <- asks runtimeVariables
     rv <- newRV
-    ioa $ SM.insert rv v vars
+    let rv' = case runtimeBehavior v of
+            Pure val -> rv{variableValue = val}
+            _ -> rv
+    ioa $ SM.insert rv' v vars
 
 newtype UID = UID {getUID :: Int}
     deriving (Eq, Ord, Show, Num, Hashable)
@@ -143,6 +150,18 @@ getValue :: Variable -> MercuryRuntime b Text
 getValue v = do
     vars <- asks runtimeVariables
     ioa $ maybe "" variableValue <$> SM.lookup v vars
+
+updateTypedValue :: TypedVariable a -> a -> MercuryRuntime b ()
+updateTypedValue tv val = updateValue (rawVariable tv) (encode tv val)
+
+getTypedValue :: TypedVariable a -> MercuryRuntime b (Maybe a)
+getTypedValue tv =
+    decode tv <$> getValue (rawVariable tv)
+
+withTypedValue :: TypedVariable a -> (a -> MercuryRuntime b c) -> MercuryRuntime b (Maybe c)
+withTypedValue tv act = do
+    v <- getTypedValue tv
+    mapM act v
 
 evalExpression :: Expression a -> MercuryRuntime b a
 evalExpression e = eval e getValue
