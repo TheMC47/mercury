@@ -30,6 +30,7 @@ library
     import:           warnings
     exposed-modules:
           Mercury.DevMain
+        , Mercury.Expression
         , Mercury.Runtime
         , Mercury.Runtime.Rendering.Backend
         , Mercury.Runtime.Rendering.Gtk
@@ -38,6 +39,7 @@ library
         , Mercury.Variable.Typed
         , Mercury.Widget
         , Mercury.Window
+        , Mercury.Window.Geometry
 
     build-depends:
           base ^>=4.18.3.0

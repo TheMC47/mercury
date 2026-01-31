@@ -5,8 +5,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Mercury.Runtime (
     RuntimeEnvironment (..),
@@ -57,7 +55,7 @@ import Mercury.Runtime.Identified
 import Mercury.Runtime.Rendering.Backend
 import Mercury.Variable
 import Mercury.Variable.Typed
-import Mercury.Widget
+import Mercury.Expression
 import qualified StmContainers.Map as SM
 import qualified StmContainers.Set as SS
 import UnliftIO (IORef, MonadUnliftIO)
@@ -81,9 +79,9 @@ data RuntimeEnvironment b = (RenderingBackend b) =>
     , applicationInstance :: !(IORef (Maybe (Application b)))
     }
 
-startApplication :: forall b. (RenderingBackend b) => MercuryRuntime b (Application b)
+startApplication :: (RenderingBackend b) => MercuryRuntime b (Application b)
 startApplication = do
-    app <- liftIO $ createApplication @b "com.example.mercuryapp"
+    app <- liftIO $ createApplication "com.example.mercuryapp"
     applicationInstanceRef <- asks applicationInstance
     liftIO $ writeIORef applicationInstanceRef (Just app)
     return app
@@ -93,8 +91,8 @@ withApplication action = do
     appM <- liftIO . readIORef =<< asks applicationInstance
     mapM action appM
 
-closeWindows :: forall b. (RenderingBackend b) => MercuryRuntime b ()
-closeWindows = void $ withApplication (\(app :: Application b) -> killAllWindows @b app)
+closeWindows :: (RenderingBackend b) => MercuryRuntime b ()
+closeWindows = void $ withApplication killAllWindows
 
 withUID :: a -> MercuryRuntime b (Identified a)
 withUID a =

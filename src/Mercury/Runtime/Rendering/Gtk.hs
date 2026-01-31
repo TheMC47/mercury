@@ -30,6 +30,7 @@ import Graphics.X11.Xlib.Extras as X11
 import Mercury.Runtime
 import Mercury.Runtime.Rendering.Backend
 import Mercury.Window
+import Mercury.Window.Geometry
 import System.Exit (exitSuccess)
 import UnliftIO
 import UnliftIO.Concurrent
@@ -37,36 +38,36 @@ import UnliftIO.Concurrent
 data GtkBackend = GtkBackend
 
 instance RenderingBackend GtkBackend where
-    type Widget GtkBackend = Gtk.Widget
-    type Box GtkBackend = Gtk.Box
-    type Label GtkBackend = Gtk.Label
-    type Button GtkBackend = Gtk.Button
-    type Window GtkBackend = Gtk.Window
-    type Application GtkBackend = Gtk.Application
+    newtype Widget GtkBackend = MkWidget Gtk.Widget
+    newtype Box GtkBackend = MkBox Gtk.Box
+    newtype Label GtkBackend = MkLabel Gtk.Label
+    newtype Button GtkBackend = MkButton Gtk.Button
+    newtype Window GtkBackend = MkWindow Gtk.Window
+    newtype Application GtkBackend = MkApplication Gtk.Application
 
     renderBox homogeneous ws = do
         box <- new Gtk.Box [#homogeneous := homogeneous]
-        traverse_ (#append box) ws
-        return box
-    renderLabel str = new Gtk.Label [#label := str]
-    renderButton w onClick = do
+        traverse_ (#append box) [w | MkWidget w <- ws]
+        return (MkBox box)
+    renderLabel str = MkLabel <$> new Gtk.Label [#label := str]
+    renderButton (MkWidget w) onClick = do
         onClickIO <- toIO onClick
-        new Gtk.Button [#child := w, On #clicked onClickIO]
-    setLabelText = #setLabel
-    labelToWidget = Gtk.toWidget
-    boxToWidget = Gtk.toWidget
-    buttonToWidget = Gtk.toWidget
+        MkButton <$> new Gtk.Button [#child := w, On #clicked onClickIO]
+    setLabelText (MkLabel l) = #setLabel l
+    labelToWidget (MkLabel l) = MkWidget <$> Gtk.toWidget l
+    boxToWidget (MkBox b) = MkWidget <$> Gtk.toWidget b
+    buttonToWidget (MkButton b) = MkWidget <$> Gtk.toWidget b
 
-    createApplication appId = new Gtk.Application [#applicationId := appId]
-    onApplicationActivate app action =
+    createApplication appId = MkApplication <$> new Gtk.Application [#applicationId := appId]
+    onApplicationActivate (MkApplication app) action =
         toIO action >>= void . Gtk.on app #activate
 
-    runApplication app = void $ #run app Nothing
-    killAllWindows app = do
+    runApplication (MkApplication app) = void $ #run app Nothing
+    killAllWindows (MkApplication app) = do
         windows <- #getWindows app
         traverse_ (\w -> #hide w >> #destroy w) windows
 
-    renderWindow app w geom t = do
+    renderWindow (MkApplication app) (MkWidget w) geom t = do
         win <-
             new
                 Gtk.Window
@@ -80,7 +81,7 @@ instance RenderingBackend GtkBackend where
                 ]
         setMoveWindow win (screen geom) (position geom)
         #present win
-        return win
+        return (MkWindow win)
 
     idleAdd action = do
         ioAction <- toIO action

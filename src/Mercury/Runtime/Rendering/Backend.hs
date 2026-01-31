@@ -6,16 +6,16 @@ module Mercury.Runtime.Rendering.Backend (RenderingBackend (..)) where
 
 import Control.Monad.IO.Class
 import Data.Text
-import Mercury.Window (Geometry)
+import Mercury.Window.Geometry (Geometry)
 import UnliftIO
 
 class RenderingBackend b where
-    type Widget b
-    type Box b
-    type Label b
-    type Button b
-    type Window b
-    type Application b
+    data Widget b
+    data Box b
+    data Label b
+    data Button b
+    data Window b
+    data Application b
 
     renderBox :: (MonadIO m) => Bool -> [Widget b] -> m (Box b)
     renderLabel :: (MonadIO m) => Text -> m (Label b)

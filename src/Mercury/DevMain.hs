@@ -7,15 +7,12 @@
 -- opaque and hide the reliance on Text to identify variables.
 -- - Add a logging system
 -- - Handle errors better, especially decoding variable values
-{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 
 module Mercury.DevMain (update) where
 
@@ -48,6 +45,7 @@ import Mercury.Variable
 import Mercury.Variable.Typed
 import Mercury.Widget
 import Mercury.Window
+import Mercury.Window.Geometry
 import qualified StmContainers.Map as SM
 import System.IO
 import System.Process
@@ -55,7 +53,7 @@ import UnliftIO (IORef, MonadUnliftIO, askRunInIO)
 import UnliftIO.Concurrent
 
 -- Config-----------------------------------------------------------------------
-myWindow :: (R.RenderingBackend b) => Window (MercuryRuntime b)
+myWindow :: Window
 myWindow =
     Window
         { rootWidget = myWidget
@@ -92,43 +90,43 @@ mountExpression expr onChange =
         )
         (S.toList (dependencies expr))
 
-render :: forall b. (RenderingBackend b) => Widget (MercuryRuntime b) -> MercuryRuntime b (R.Widget b)
+render :: (RenderingBackend b) => Widget -> MercuryRuntime b (R.Widget b)
 render Label{..} = do
     textValue <- evalExpression text
-    labelWidget <- renderLabel @b textValue
-    unless (isStatic text) (void $ mountExpression text (setLabelText @b labelWidget))
-    labelToWidget @b labelWidget
+    labelWidget <- renderLabel textValue
+    unless (isStatic text) (void $ mountExpression text (setLabelText labelWidget))
+    labelToWidget labelWidget
 render Box{..} = do
-    renderedChildren <- traverse (render @b) children
-    boxWidget <- renderBox @b spaceEvenly renderedChildren
-    boxToWidget @b boxWidget
+    renderedChildren <- traverse render children
+    boxWidget <- renderBox spaceEvenly renderedChildren
+    boxToWidget boxWidget
 render Button{..} = do
-    renderedChild <- render @b child
-    buttonWidget <- renderButton @b renderedChild onClick
-    buttonToWidget @b buttonWidget
+    renderedChild <- render child
+    buttonWidget <- renderButton renderedChild (runAction onClick)
+    buttonToWidget buttonWidget
 
-renderWindow :: forall b. (RenderingBackend b) => R.Application b -> Window (MercuryRuntime b) -> MercuryRuntime b (R.Window b)
+renderWindow :: (RenderingBackend b) => R.Application b -> Window -> MercuryRuntime b (R.Window b)
 renderWindow app Window{..} = do
-    widget <- render @b rootWidget
-    R.renderWindow @b app widget geometry title
+    widget <- render rootWidget
+    R.renderWindow app widget geometry title
 
 update :: IO ()
 update = activate
 
-activate' :: forall b. (RenderingBackend b) => MercuryRuntime b ()
+activate' :: (R.RenderingBackend b) => MercuryRuntime b ()
 activate' = do
     time <- liftIO getPOSIXTime
     liftIO $ putStrLn $ "Application started at POSIX time: " ++ show time
-    app <- startApplication @b
+    app <- startApplication
 
-    let allVars = getAllVars (myWidget @b)
+    let allVars = getAllVars myWidget
     traverse_ addVariable (S.toList allVars)
     traverse_ setupVariable (S.toList allVars)
 
-    onApplicationActivate @b app $ do
-        void $ renderWindow @b app myWindow
+    onApplicationActivate app $ do
+        void $ renderWindow app myWindow
         liftIO $ putStrLn $ "Render finished" ++ show time
-    runApplication @b app
+    runApplication app
 
 runPollingAction :: PollingAction -> MercuryRuntime b Text
 runPollingAction (PollingCustomIO io) = liftIO io
@@ -139,7 +137,7 @@ runPollingAction (PollingScriptAction (Script path args)) = do
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show
 
-myWidget :: (R.RenderingBackend b) => Widget (MercuryRuntime b)
+myWidget :: Widget
 myWidget =
     Box
         { spaceEvenly = True
@@ -147,12 +145,16 @@ myWidget =
             [ Label{text = (#) timestampVar}
             , Button
                 { child = Box{spaceEvenly = False, children = [Label{text = tshow <$> cpuAnd100}]}
-                , onClick = closeWindows
+                , onClick = Action closeWindows
                 }
             , Button
                 { child = Label{text = pure "Increment"}
-                , onClick = void $ withTypedValue cpuUsage $ \c ->
-                    updateTypedValue cpuUsage (c + 1)
+                , onClick =
+                    Action
+                        ( void $
+                            withTypedValue cpuUsage $
+                                updateTypedValue cpuUsage . (+ 1)
+                        )
                 }
             , Label{text = (#) xpropSpy}
             ]
