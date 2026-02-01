@@ -3,18 +3,37 @@ module Mercury.Window.Geometry (
     Geometry (..),
     Anchor (..),
     Stacking (..),
+    Dimension (..),
+    concretizeDimension,
+    Strut (..),
+    Direction (..),
 ) where
 
 import Data.Default (Default (..))
 
+data Dimension
+    = Absolute !Int
+    | Percentage !Int
+    deriving (Eq, Show)
+
+concretizeDimension :: (Integral a) => a -> Dimension -> a
+concretizeDimension _ (Absolute x) = fromIntegral x
+concretizeDimension l (Percentage x) = (l * fromIntegral x) `div` 100
+
+data Direction = L | R | T | B
+
+data Strut = Strut !Direction !Dimension
+
+-- type Position = (Dimension, Dimension)
 type Position = (Int, Int)
 
 data Geometry = Geometry
-    { width :: !(Maybe Int)
-    , height :: !(Maybe Int)
+    { width :: !(Maybe Dimension)
+    , height :: !(Maybe Dimension)
     , position :: !Position
     , anchor :: !Anchor
     , screen :: !Int
+    , strut :: !(Maybe Strut)
     }
 
 instance Default Geometry where
@@ -25,6 +44,7 @@ instance Default Geometry where
             , position = (0, 0)
             , anchor = TopCenter
             , screen = 0
+            , strut = Nothing
             }
 
 data Anchor

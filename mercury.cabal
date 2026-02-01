@@ -55,16 +55,16 @@ library
     import:           warnings, lib-deps
     exposed-modules:
           Mercury.DevMain
-        , Mercury.Expression
-        , Mercury.Runtime
-        , Mercury.Runtime.Rendering.Backend
-        , Mercury.Runtime.Rendering.Gtk
-        , Mercury.Runtime.Identified
-        , Mercury.Variable
-        , Mercury.Variable.Typed
-        , Mercury.Widget
-        , Mercury.Window
-        , Mercury.Window.Geometry
+          Mercury.Expression
+          Mercury.Runtime
+          Mercury.Runtime.Rendering.Backend
+          Mercury.Runtime.Rendering.Gtk
+          Mercury.Runtime.Identified
+          Mercury.Variable
+          Mercury.Variable.Typed
+          Mercury.Widget
+          Mercury.Window
+          Mercury.Window.Geometry
 
     hs-source-dirs:   src
     default-language: GHC2021
@@ -86,8 +86,20 @@ test-suite mercury-test
     hs-source-dirs:   test, src
     main-is:          Spec.hs
     other-modules:
-        Mercury.Window.GeometrySpec
+        Mercury.DevMain
+        Mercury.Expression
+        Mercury.Runtime
+        Mercury.Runtime.Rendering.Backend
+        Mercury.Runtime.Rendering.Gtk
+        Mercury.Runtime.Identified
+        Mercury.Variable
+        Mercury.Variable.Typed
+        Mercury.Widget
+        Mercury.Window
         Mercury.Window.Geometry
+        -- Tests here
+        Mercury.Window.GeometrySpec
+        Mercury.Runtime.Rendering.GtkSpec 
     build-depends:
         hspec,
         QuickCheck

@@ -44,9 +44,10 @@ myWindow =
         { rootWidget = myWidget
         , geometry =
             def
-                { width = Just 100
-                , height = Just 10
-                , position = (26, 26)
+                { width = Nothing
+                , height = Just (Percentage 1)
+                , position = (0, 0)
+                , strut = Nothing
                 , screen = 1
                 }
         , title = "Mercury GTK Example"
@@ -56,7 +57,7 @@ timestampVar :: TypedVariable Text
 timestampVar = pollingVar "current_time" 1000 (tshow <$> getCurrentTime)
 
 cpuUsage :: TypedVariable Int
-cpuUsage = pollingVar "cpu_usage" 2000 (return 72)
+cpuUsage = pureVar "cpu_usage" 99
 
 xpropSpy :: TypedVariable Text
 xpropSpy = subscriptionVar "xprop_spy" (SubscriptionScriptAction (Script "xprop" ["-root", "-spy", "_NET_ACTIVE_WINDOW"]))
@@ -125,7 +126,7 @@ tshow = T.pack . show
 myWidget :: Widget
 myWidget =
     Box
-        { spaceEvenly = True
+        { spaceEvenly = False
         , children =
             [ Label{text = (#) timestampVar}
             , Button
