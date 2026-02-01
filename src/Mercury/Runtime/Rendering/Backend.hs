@@ -1,35 +1,32 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Mercury.Runtime.Rendering.Backend (RenderingBackend (..)) where
+module Mercury.Runtime.Rendering.Backend (
+    RenderingBackend (..),
+    RenderedLabel (..),
+) where
 
 import Control.Monad.IO.Class
+import Data.Kind (Type)
 import Data.Text
 import Mercury.Window.Geometry (Geometry)
 import UnliftIO
 
-class RenderingBackend b where
+class RenderingBackend (b :: Type) where
     data Widget b
-    data Box b
-    data Label b
-    data Button b
     data Window b
-    data Application b
+    data BackendHandle b
 
-    renderBox :: (MonadIO m) => Bool -> [Widget b] -> m (Box b)
-    renderLabel :: (MonadIO m) => Text -> m (Label b)
-    renderButton :: (MonadUnliftIO m) => Widget b -> m () -> m (Button b)
-    renderWindow :: (MonadUnliftIO m) => Application b -> Widget b -> Geometry -> Text -> m (Window b)
+    withBackend :: (MonadUnliftIO m) => Text -> (BackendHandle b -> m ()) -> m ()
+    shutdown :: (MonadIO m) => BackendHandle b -> m ()
 
-    setLabelText :: (MonadIO m) => Label b -> Text -> m ()
+    renderBox :: (MonadIO m) => Bool -> [Widget b] -> m (Widget b)
+    renderLabel :: (MonadIO m) => Text -> m (RenderedLabel b)
+    renderButton :: (MonadUnliftIO m) => Widget b -> m () -> m (Widget b)
 
-    createApplication :: (MonadIO m) => Text -> m (Application b)
-    onApplicationActivate :: (MonadUnliftIO m) => Application b -> m () -> m ()
-    runApplication :: (MonadIO m) => Application b -> m ()
-    killAllWindows :: (MonadIO m) => Application b -> m ()
+    createWindow :: (MonadUnliftIO m) => BackendHandle b -> Widget b -> Geometry -> Text -> m (Window b)
 
-    labelToWidget :: (MonadIO m) => Label b -> m (Widget b)
-    boxToWidget :: (MonadIO m) => Box b -> m (Widget b)
-    buttonToWidget :: (MonadIO m) => Button b -> m (Widget b)
-
-    idleAdd :: (MonadUnliftIO m) => m () -> m ()
+data RenderedLabel b = RenderedLabel
+    { labelWidget :: !(Widget b)
+    , setText :: forall m. (MonadUnliftIO m) => Text -> m ()
+    }

@@ -1,3 +1,4 @@
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Mercury.Widget (
@@ -7,14 +8,15 @@ module Mercury.Widget (
     module Mercury.Expression,
 ) where
 
-import qualified Data.Set as S
+import Data.Kind (Type)
+import Data.Set qualified as S
 import Data.Text (Text)
 import Mercury.Expression
 import Mercury.Runtime (MercuryRuntime)
 import Mercury.Runtime.Rendering.Backend (RenderingBackend)
 import Mercury.Variable (Variable)
 
-newtype Action = Action {runAction :: forall b. (RenderingBackend b) => MercuryRuntime b ()}
+data Action = Action {runAction :: forall (b :: Type). (RenderingBackend b) => MercuryRuntime b ()}
 
 data Widget
     = Box

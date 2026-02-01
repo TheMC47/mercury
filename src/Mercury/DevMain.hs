@@ -9,6 +9,7 @@
 -- - Handle errors better, especially decoding variable values
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Mercury.DevMain (update) where
 
@@ -16,7 +17,6 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
-import Data.IORef
 import Data.Set qualified as S
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -24,7 +24,7 @@ import Data.Time
 import Data.Time.Clock.POSIX
 import Mercury.Runtime
 import Mercury.Runtime.Identified (Identified, newStoreIO)
-import Mercury.Runtime.Rendering.Backend hiding (Widget, Window, renderWindow)
+import Mercury.Runtime.Rendering.Backend hiding (Widget, Window)
 import Mercury.Runtime.Rendering.Backend qualified as R
 import Mercury.Runtime.Rendering.Gtk
 import Mercury.Variable
@@ -79,40 +79,35 @@ mountExpression expr onChange =
 render :: (RenderingBackend b) => Widget -> MercuryRuntime b (R.Widget b)
 render Label{..} = do
     textValue <- evalExpression text
-    labelWidget <- renderLabel textValue
-    unless (isStatic text) (void $ mountExpression text (setLabelText labelWidget))
-    labelToWidget labelWidget
+    label <- renderLabel textValue
+    unless (isStatic text) (void $ mountExpression text (setText label))
+    return (labelWidget label)
 render Box{..} = do
     renderedChildren <- traverse render children
-    boxWidget <- renderBox spaceEvenly renderedChildren
-    boxToWidget boxWidget
-render Button{..} = do
+    renderBox spaceEvenly renderedChildren
+render Button{child, onClick = Action a} = do
     renderedChild <- render child
-    buttonWidget <- renderButton renderedChild (runAction onClick)
-    buttonToWidget buttonWidget
+    renderButton renderedChild a
 
-renderWindow :: (RenderingBackend b) => R.Application b -> Window -> MercuryRuntime b (R.Window b)
-renderWindow app Window{..} = do
+renderWindow :: (RenderingBackend b) => R.BackendHandle b -> Window -> MercuryRuntime b (R.Window b)
+renderWindow handle Window{..} = do
     widget <- render rootWidget
-    R.renderWindow app widget geometry title
+    createWindow handle widget geometry title
 
 update :: IO ()
 update = activate
 
-activate' :: (R.RenderingBackend b) => MercuryRuntime b ()
-activate' = do
+activate' :: (R.RenderingBackend b) => R.BackendHandle b -> MercuryRuntime b ()
+activate' handle = do
     time <- liftIO getPOSIXTime
     liftIO $ putStrLn $ "Application started at POSIX time: " ++ show time
-    app <- startApplication
 
     let allVars = getAllVars myWidget
     traverse_ addVariable (S.toList allVars)
     traverse_ setupVariable (S.toList allVars)
 
-    onApplicationActivate app $ do
-        void $ renderWindow app myWindow
-        liftIO $ putStrLn $ "Render finished" ++ show time
-    runApplication app
+    void $ renderWindow handle myWindow
+    liftIO $ putStrLn $ "Render finished" ++ show time
 
 runPollingAction :: PollingAction -> MercuryRuntime b Text
 runPollingAction (PollingCustomIO io) = liftIO io
@@ -170,6 +165,7 @@ activate :: IO ()
 activate = do
     runtimeVariables <- SM.newIO
     uidStore <- newStoreIO
-    let renderingBackend = GtkBackend
-    applicationInstance <- newIORef Nothing
-    runMercuryRuntime activate' (RuntimeEnvironment{..})
+    withBackend @GtkBackend "com.example.mercuryapp" $ \handle -> do
+        let backendHandle = handle
+            env = RuntimeEnvironment{..}
+        runMercuryRuntime (activate' handle) env

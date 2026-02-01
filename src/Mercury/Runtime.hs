@@ -17,7 +17,6 @@ module Mercury.Runtime (
     subscribeToVariable,
     ioa,
     closeWindows,
-    startApplication,
 ) where
 
 import Control.Concurrent.STM
@@ -27,7 +26,6 @@ import Control.Monad.Reader (MonadReader, ask, asks)
 import Control.Monad.Trans.Reader (ReaderT (..))
 import Data.Foldable
 import Data.Hashable
-import Data.IORef
 import Data.Text (Text)
 import Focus qualified as F
 import ListT qualified as LT
@@ -54,24 +52,11 @@ data RuntimeEnvironment b = (RenderingBackend b) =>
     RuntimeEnvironment
     { runtimeVariables :: !(SM.Map Variable (RuntimeVariable b))
     , uidStore :: !UniqueIDStore
-    , renderingBackend :: !b
-    , applicationInstance :: !(IORef (Maybe (Application b)))
+    , backendHandle :: !(BackendHandle b)
     }
 
-startApplication :: (RenderingBackend b) => MercuryRuntime b (Application b)
-startApplication = do
-    app <- liftIO $ createApplication "com.example.mercuryapp"
-    applicationInstanceRef <- asks applicationInstance
-    liftIO $ writeIORef applicationInstanceRef (Just app)
-    return app
-
-withApplication :: (Application b -> MercuryRuntime b a) -> MercuryRuntime b (Maybe a)
-withApplication action = do
-    appM <- liftIO . readIORef =<< asks applicationInstance
-    mapM action appM
-
 closeWindows :: (RenderingBackend b) => MercuryRuntime b ()
-closeWindows = void $ withApplication killAllWindows
+closeWindows = asks backendHandle >>= shutdown
 
 withUID :: a -> MercuryRuntime b (Identified a)
 withUID a =

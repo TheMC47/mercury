@@ -12,12 +12,10 @@ module Mercury.Runtime.Rendering.Gtk (
 
 import Control.Monad
 import Data.Foldable (traverse_)
-import Data.Functor
 import Data.GI.Base
 import Data.Maybe (listToMaybe)
 import Foreign (castPtr)
 import Foreign.C (CInt, CLong)
-import GI.GLib qualified as GLib
 import GI.Gdk qualified as Gdk
 import GI.Gdk.Objects.Surface
 import GI.GdkX11 qualified as GdkX11
@@ -34,36 +32,39 @@ data GtkBackend = GtkBackend
 
 instance RenderingBackend GtkBackend where
     newtype Widget GtkBackend = MkWidget Gtk.Widget
-    newtype Box GtkBackend = MkBox Gtk.Box
-    newtype Label GtkBackend = MkLabel Gtk.Label
-    newtype Button GtkBackend = MkButton Gtk.Button
     newtype Window GtkBackend = MkWindow Gtk.Window
-    newtype Application GtkBackend = MkApplication Gtk.Application
+    newtype BackendHandle GtkBackend = MkBackendHandle Gtk.Application
+
+    withBackend appId callback = do
+        app <- new Gtk.Application [#applicationId := appId]
+        callbackIO <- toIO (callback (MkBackendHandle app))
+        void $ Gtk.on app #activate callbackIO
+        void $ #run app Nothing
+
+    shutdown (MkBackendHandle app) = do
+        windows <- #getWindows app
+        traverse_ (\w -> #hide w >> #destroy w) windows
 
     renderBox homogeneous ws = do
         box <- new Gtk.Box [#homogeneous := homogeneous]
         traverse_ (#append box) [w | MkWidget w <- ws]
-        return (MkBox box)
-    renderLabel str = MkLabel <$> new Gtk.Label [#label := str]
+        MkWidget <$> Gtk.toWidget box
+
+    renderLabel str = do
+        label <- new Gtk.Label [#label := str]
+        widget <- Gtk.toWidget label
+        pure $
+            RenderedLabel
+                { labelWidget = MkWidget widget
+                , setText = #setLabel label
+                }
+
     renderButton (MkWidget w) onClick = do
         onClickIO <- toIO onClick
-        MkButton <$> new Gtk.Button [#child := w, On #clicked onClickIO]
-    setLabelText (MkLabel l) = #setLabel l
-    labelToWidget (MkLabel l) = MkWidget <$> Gtk.toWidget l
-    boxToWidget (MkBox b) = MkWidget <$> Gtk.toWidget b
-    buttonToWidget (MkButton b) = MkWidget <$> Gtk.toWidget b
+        btn <- new Gtk.Button [#child := w, On #clicked onClickIO]
+        MkWidget <$> Gtk.toWidget btn
 
-    createApplication appId = MkApplication <$> new Gtk.Application [#applicationId := appId]
-    onApplicationActivate (MkApplication app) action = do
-        a <- toIO action
-        void $ Gtk.on app #activate a
-
-    runApplication (MkApplication app) = void $ #run app Nothing
-    killAllWindows (MkApplication app) = do
-        windows <- #getWindows app
-        traverse_ (\w -> #hide w >> #destroy w) windows
-
-    renderWindow (MkApplication app) (MkWidget w) geom t = do
+    createWindow (MkBackendHandle app) (MkWidget w) geom t = do
         win <-
             new
                 Gtk.Window
@@ -76,10 +77,6 @@ instance RenderingBackend GtkBackend where
         setWindowGeometry win geom
         #present win
         return (MkWindow win)
-
-    idleAdd action = do
-        ioAction <- toIO action
-        void $ GLib.idleAdd GLib.PRIORITY_DEFAULT_IDLE (ioAction $> False)
 
 whenJust :: (Applicative m) => Maybe a -> (a -> m ()) -> m ()
 whenJust Nothing _ = pure ()
