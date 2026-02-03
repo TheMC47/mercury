@@ -17,6 +17,8 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
+import Data.Functor
+import Data.GI.Base.Utils (whenJust)
 import Data.Set qualified as S
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -44,11 +46,11 @@ myWindow =
         { rootWidget = myWidget
         , geometry =
             def
-                { width = Nothing
-                , height = Just (Percentage 1)
-                , position = (0, 0)
+                { width = Just (Percentage 50)
+                , height = Just (Percentage 2)
+                , position = (50, 1400)
                 , strut = Nothing
-                , screen = 1
+                , screen = 0
                 }
         , title = "Mercury GTK Example"
         }
@@ -85,9 +87,16 @@ render Label{..} = do
 render Box{..} = do
     renderedChildren <- traverse render children
     renderBox spaceEvenly renderedChildren
-render Button{child, onClick = Action a} = do
+render Button{onClick = Action a, ..} = do
     renderedChild <- render child
-    renderButton renderedChild a
+    button <- renderButton renderedChild a
+    whenJust buttonClass $ \expr -> do
+        classValue <- evalExpression expr
+        setClass button classValue
+        unless (isStatic expr) $
+            void $
+                mountExpression expr (setClass button)
+    return (buttonWidget button)
 
 renderWindow :: (RenderingBackend b) => R.BackendHandle b -> Window -> MercuryRuntime b (R.Window b)
 renderWindow handle Window{..} = do
@@ -121,12 +130,15 @@ tshow = T.pack . show
 myWidget :: Widget
 myWidget =
     Box
-        { spaceEvenly = False
+        { spaceEvenly = True
         , children =
             [ Label{text = (#) timestampVar}
             , Button
                 { child = Box{spaceEvenly = False, children = [Label{text = tshow <$> cpuAnd100}]}
                 , onClick = Action closeWindows
+                , buttonClass =
+                    Just
+                        (cpuAnd100 <&> \v -> ["close-button" | v >= 100])
                 }
             , Button
                 { child = Label{text = pure "Increment"}
@@ -136,6 +148,7 @@ myWidget =
                             withTypedValue cpuUsage $
                                 updateTypedValue cpuUsage . (+ 1)
                         )
+                , buttonClass = Nothing
                 }
             , Label{text = (#) xpropSpy}
             ]
@@ -165,7 +178,7 @@ activate :: IO ()
 activate = do
     runtimeVariables <- SM.newIO
     uidStore <- newStoreIO
-    withBackend @GtkBackend "com.example.mercuryapp" $ \handle -> do
+    withBackend @GtkBackend (def{applicationId = "com.example.mercuryapp", cssFilePath = Just "style.css"}) $ \handle -> do
         let backendHandle = handle
             env = RuntimeEnvironment{..}
         runMercuryRuntime (activate' handle) env

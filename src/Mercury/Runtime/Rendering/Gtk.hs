@@ -8,12 +8,16 @@
 module Mercury.Runtime.Rendering.Gtk (
     GtkBackend (..),
     concretizeStruts,
+    ExtraBackendData (..),
 ) where
 
 import Control.Monad
+import Data.Default (Default (def))
 import Data.Foldable (traverse_)
 import Data.GI.Base
+import Data.GI.Base.Utils
 import Data.Maybe (listToMaybe)
+import Data.Text (Text)
 import Foreign (castPtr)
 import Foreign.C (CInt, CLong)
 import GI.Gdk qualified as Gdk
@@ -34,12 +38,31 @@ instance RenderingBackend GtkBackend where
     newtype Widget GtkBackend = MkWidget Gtk.Widget
     newtype Window GtkBackend = MkWindow Gtk.Window
     newtype BackendHandle GtkBackend = MkBackendHandle Gtk.Application
+    data ExtraBackendData GtkBackend = ExtraGTKData
+        { cssFilePath :: !(Maybe FilePath)
+        , applicationId :: !Text
+        }
 
-    withBackend appId callback = do
-        app <- new Gtk.Application [#applicationId := appId]
+    withBackend ExtraGTKData{..} callback = do
+        app <- new Gtk.Application [#applicationId := applicationId]
         callbackIO <- toIO (callback (MkBackendHandle app))
-        void $ Gtk.on app #activate callbackIO
+        void $ Gtk.on app #activate $ do
+            whenJust cssFilePath setupCSS
+            callbackIO
         void $ #run app Nothing
+      where
+        setupCSS :: FilePath -> IO ()
+        setupCSS path = do
+            cssProvider <- Gtk.cssProviderNew
+            Gtk.cssProviderLoadFromPath cssProvider path
+            maybeDisplay <- Gdk.displayGetDefault
+            case maybeDisplay of
+                Just display ->
+                    Gtk.styleContextAddProviderForDisplay
+                        display
+                        cssProvider
+                        (fromIntegral Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+                Nothing -> putStrLn "Warning: No display found, CSS not loaded."
 
     shutdown (MkBackendHandle app) = do
         windows <- #getWindows app
@@ -62,7 +85,12 @@ instance RenderingBackend GtkBackend where
     renderButton (MkWidget w) onClick = do
         onClickIO <- toIO onClick
         btn <- new Gtk.Button [#child := w, On #clicked onClickIO]
-        MkWidget <$> Gtk.toWidget btn
+        widget <- Gtk.toWidget btn
+        pure $
+            RenderedButton
+                { buttonWidget = MkWidget widget
+                , setClass = #setCssClasses btn
+                }
 
     createWindow (MkBackendHandle app) (MkWidget w) geom t = do
         win <-
@@ -78,9 +106,12 @@ instance RenderingBackend GtkBackend where
         #present win
         return (MkWindow win)
 
-whenJust :: (Applicative m) => Maybe a -> (a -> m ()) -> m ()
-whenJust Nothing _ = pure ()
-whenJust (Just x) f = f x
+instance Default (ExtraBackendData GtkBackend) where
+    def =
+        ExtraGTKData
+            { cssFilePath = Nothing
+            , applicationId = "com.example.MercuryApp"
+            }
 
 setWindowGeometry :: (MonadUnliftIO m) => Gtk.Window -> Geometry -> m ()
 setWindowGeometry win Geometry{position = (x, y), ..} = void $ on win #realize $ do

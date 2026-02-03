@@ -29,6 +29,7 @@ data Widget
     | Button
         { child :: !Widget
         , onClick :: !Action
+        , buttonClass :: !(Maybe (Expression [Text]))
         }
 
 getAllVars :: Widget -> S.Set Variable
