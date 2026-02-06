@@ -24,6 +24,7 @@ import GI.Gdk qualified as Gdk
 import GI.Gdk.Objects.Surface
 import GI.GdkX11 qualified as GdkX11
 import GI.Gtk qualified as Gtk
+import GI.Pango
 import Graphics.X11 (rect_height, rect_width, rect_x, rect_y)
 import Graphics.X11 qualified as X11
 import Graphics.X11.Xinerama (getScreenInfo)
@@ -68,28 +69,52 @@ instance RenderingBackend GtkBackend where
         windows <- #getWindows app
         traverse_ (\w -> #hide w >> #destroy w) windows
 
-    renderBox homogeneous ws = do
-        box <- new Gtk.Box [#homogeneous := homogeneous]
-        traverse_ (#append box) [w | MkWidget w <- ws]
-        MkWidget <$> Gtk.toWidget box
-
-    renderLabel str = do
-        label <- new Gtk.Label [#label := str]
-        widget <- Gtk.toWidget label
+    renderBox RenderBoxProps{..} = do
+        box <- new Gtk.Box [#hexpand := False, #vexpand := False]
+        whenJust renderBox_spaceEvenly (#setHomogeneous box)
+        whenJust renderBox_class (#setCssClasses box)
+        traverse_ (#append box) [w | MkWidget w <- renderBox_children]
+        widget <- Gtk.toWidget box
         pure $
-            RenderedLabel
-                { labelWidget = MkWidget widget
-                , setText = #setLabel label
+            RenderedBox
+                { box_widget = MkWidget widget
+                , box_setClass = #setCssClasses box
+                , box_setSpaceEvenly = #setHomogeneous box
                 }
 
-    renderButton (MkWidget w) onClick = do
-        onClickIO <- toIO onClick
-        btn <- new Gtk.Button [#child := w, On #clicked onClickIO]
+    renderLabel RenderLabelProps{..} = do
+        label <-
+            new
+                Gtk.Label
+                [ #label := renderLabel_text
+                , #hexpand := False
+                , #vexpand := False
+                , #ellipsize := EllipsizeModeEnd
+                ]
+        widget <- Gtk.toWidget label
+        whenJust renderLabel_class (#setCssClasses label)
+        pure $
+            RenderedLabel
+                { label_widget = MkWidget widget
+                , label_setText = #setLabel label
+                , label_setClass = #setCssClasses label
+                }
+
+    renderButton RenderButtonProps{..} = do
+        btn <- new Gtk.Button [#hexpand := False, #vexpand := False]
+        whenJust renderButton_class (#setCssClasses btn)
+        whenJust renderButton_child (#setChild btn . (\(MkWidget w) -> Just w))
+        whenJust renderButton_onClick $ \action -> do
+            onClickIO <- toIO action
+            void $ Gtk.on btn #clicked onClickIO
         widget <- Gtk.toWidget btn
         pure $
             RenderedButton
-                { buttonWidget = MkWidget widget
-                , setClass = #setCssClasses btn
+                { button_widget = MkWidget widget
+                , button_setClass = #setCssClasses btn
+                , button_setOnClick = \action -> do
+                    onClickIO <- toIO action
+                    void $ Gtk.on btn #clicked onClickIO
                 }
 
     createWindow (MkBackendHandle app) (MkWidget w) geom t = do
@@ -134,6 +159,7 @@ setWindowGeometry win Geometry{position = (x, y), ..} = void $ on win #realize $
         let w = concretizeDimension (rect_width screenInfo) <$> width
             h = concretizeDimension (rect_height screenInfo) <$> height
         #setDefaultSize win (maybe (-1) fi w) (maybe (-1) fi h)
+        #setSizeRequest win (maybe (-1) fi w) (maybe (-1) fi h)
 
         X11.flush dpy
 

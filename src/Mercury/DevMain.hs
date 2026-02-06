@@ -1,12 +1,4 @@
--- Current state: working PoC
--- What happens: A GTK application with live-updating labels based on variable expressions.
--- Next:
--- - Add more variable types: subscriptions, commands, etc.
--- - Make a configuration monad to define and build widgets. Handling variables
--- and building indexes automatically. I could also make the variable type more
--- opaque and hide the reliance on Text to identify variables.
--- - Add a logging system
--- - Handle errors better, especially decoding variable values
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
@@ -17,6 +9,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
+import Data.Function
 import Data.Functor
 import Data.GI.Base.Utils (whenJust)
 import Data.Set qualified as S
@@ -49,7 +42,7 @@ myWindow =
                 { width = Just (Percentage 50)
                 , height = Just (Percentage 2)
                 , position = (50, 1400)
-                , strut = Nothing
+                , strut = Just (Strut B (Absolute 30))
                 , screen = 0
                 }
         , title = "Mercury GTK Example"
@@ -79,24 +72,32 @@ mountExpression expr onChange =
         (S.toList (dependencies expr))
 
 render :: (RenderingBackend b) => Widget -> MercuryRuntime b (R.Widget b)
-render Label{..} = do
-    textValue <- evalExpression text
-    label <- renderLabel textValue
-    unless (isStatic text) (void $ mountExpression text (setText label))
-    return (labelWidget label)
-render Box{..} = do
-    renderedChildren <- traverse render children
-    renderBox spaceEvenly renderedChildren
-render Button{onClick = Action a, ..} = do
-    renderedChild <- render child
-    button <- renderButton renderedChild a
-    whenJust buttonClass $ \expr -> do
-        classValue <- evalExpression expr
-        setClass button classValue
-        unless (isStatic expr) $
-            void $
-                mountExpression expr (setClass button)
-    return (buttonWidget button)
+render (AnyWidget widget) = case widget of
+    WLabel{..} -> do
+        textValue <- evalExpression label_text
+        cls <- mapM evalExpression label_class
+        RenderedLabel{..} <- renderLabel RenderLabelProps{renderLabel_text = textValue, renderLabel_class = cls}
+        mountExpression label_text label_setText
+        whenJust label_class (void . (`mountExpression` label_setClass))
+        return label_widget
+    WBox{..} -> do
+        renderedChildren <- traverse render box_children
+        se <- mapM evalExpression box_spaceEvenly
+        cls <- mapM evalExpression box_class
+        RenderedBox{..} <- renderBox RenderBoxProps{renderBox_spaceEvenly = se, renderBox_children = renderedChildren, renderBox_class = cls}
+        whenJust box_spaceEvenly (void . (`mountExpression` box_setSpaceEvenly))
+        whenJust box_class (void . (`mountExpression` box_setClass))
+        return box_widget
+    WButton{..} -> do
+        renderedChild <- traverse render button_child
+        cls <- mapM evalExpression button_class
+        RenderedButton{..} <-
+            maybe
+                (renderButton RenderButtonProps{renderButton_child = renderedChild, renderButton_onClick = Nothing, renderButton_class = cls})
+                (\(Action action) -> renderButton RenderButtonProps{renderButton_child = renderedChild, renderButton_onClick = Just action, renderButton_class = cls})
+                button_onClick
+        whenJust button_class (void . (`mountExpression` button_setClass))
+        return button_widget
 
 renderWindow :: (RenderingBackend b) => R.BackendHandle b -> Window -> MercuryRuntime b (R.Window b)
 renderWindow handle Window{..} = do
@@ -111,7 +112,7 @@ activate' handle = do
     time <- liftIO getPOSIXTime
     liftIO $ putStrLn $ "Application started at POSIX time: " ++ show time
 
-    let allVars = getAllVars myWidget
+    let allVars = getAllVariables myWidget
     traverse_ addVariable (S.toList allVars)
     traverse_ setupVariable (S.toList allVars)
 
@@ -129,30 +130,23 @@ tshow = T.pack . show
 
 myWidget :: Widget
 myWidget =
-    Box
-        { spaceEvenly = True
-        , children =
-            [ Label{text = (#) timestampVar}
-            , Button
-                { child = Box{spaceEvenly = False, children = [Label{text = tshow <$> cpuAnd100}]}
-                , onClick = Action closeWindows
-                , buttonClass =
-                    Just
-                        (cpuAnd100 <&> \v -> ["close-button" | v >= 100])
-                }
-            , Button
-                { child = Label{text = pure "Increment"}
-                , onClick =
-                    Action
-                        ( void $
-                            withTypedValue cpuUsage $
-                                updateTypedValue cpuUsage . (+ 1)
-                        )
-                , buttonClass = Nothing
-                }
-            , Label{text = (#) xpropSpy}
-            ]
-        }
+    w $
+        box
+            & (spaceEvenly =: False)
+            & ( children
+                    =: [ w $ label & (text =: (#) timestampVar)
+                       , w $
+                            button
+                                & (child =: w (label & (text =: tshow <$> cpuAnd100)))
+                                & (onClick =: Action closeWindows)
+                                & (classes =: (cpuAnd100 <&> \v -> ["close-button" :: Text | v >= 100]))
+                       , w $
+                            button
+                                & (child =: Just (w $ label & (text =: ("Increment" :: Text))))
+                                & (onClick =: Action (void $ withTypedValue cpuUsage $ updateTypedValue cpuUsage . (+ 1)))
+                       , w $ label & (text =: (#) xpropSpy)
+                       ]
+              )
 
 updateVariableValue :: Variable -> Text -> MercuryRuntime b ()
 updateVariableValue = updateValue

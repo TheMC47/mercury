@@ -35,6 +35,7 @@ common lib-deps
         , gi-gio ^>=2.0.35
         , gi-gdk4 ^>=4.0.10
         , gi-gdkx11 ^>=4.0.9
+        , gi-pango ^>=1.0.30
         , haskell-gi-base ^>=0.26.9
         , text
         , process
