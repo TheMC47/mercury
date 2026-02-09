@@ -20,6 +20,8 @@ import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import Foreign (castPtr)
 import Foreign.C (CInt, CLong)
+import Foreign.Store
+import GI.GLib qualified as GLib
 import GI.Gdk qualified as Gdk
 import GI.Gdk.Objects.Surface
 import GI.GdkX11 qualified as GdkX11
@@ -31,6 +33,7 @@ import Graphics.X11.Xinerama (getScreenInfo)
 import Graphics.X11.Xlib.Extras as X11
 import Mercury.Runtime.Rendering.Backend
 import Mercury.Window.Geometry
+import System.Posix
 import UnliftIO
 
 data GtkBackend = GtkBackend
@@ -46,6 +49,10 @@ instance RenderingBackend GtkBackend where
 
     withBackend ExtraGTKData{..} callback = do
         app <- new Gtk.Application [#applicationId := applicationId]
+
+        shutdownIO <- toIO (shutdown (MkBackendHandle app))
+        liftIO $ void $ installHandler sigTERM (Catch shutdownIO) Nothing
+
         callbackIO <- toIO (callback (MkBackendHandle app))
         void $ Gtk.on app #activate $ do
             whenJust cssFilePath setupCSS
@@ -64,10 +71,24 @@ instance RenderingBackend GtkBackend where
                         cssProvider
                         (fromIntegral Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
                 Nothing -> putStrLn "Warning: No display found, CSS not loaded."
+    withHotReload ExtraGTKData{..} callback = do
+        mbOldPid <- liftIO $ lookupStore 0
+        whenJust mbOldPid $ \store -> liftIO $ do
+            oldPid <- readStore store :: IO ProcessID
+            catch
+                (signalProcess sigTERM oldPid)
+                ( \(e :: SomeException) -> putStrLn $ "SIGTERM failed: " ++ displayException e
+                )
+            void $ getProcessStatus True False oldPid
+        callbackIO <- toIO (withBackend ExtraGTKData{..} callback)
+        pid <- liftIO $ forkProcess callbackIO
+        liftIO $ writeStore (Store 0) pid
 
-    shutdown (MkBackendHandle app) = do
+    shutdown (MkBackendHandle app) = void $ GLib.idleAdd (-100) $ do
         windows <- #getWindows app
         traverse_ (\w -> #hide w >> #destroy w) windows
+        #quit app
+        return False
 
     renderBox RenderBoxProps{..} = do
         box <- new Gtk.Box [#hexpand := False, #vexpand := False]

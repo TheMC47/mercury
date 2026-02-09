@@ -51,6 +51,8 @@ common lib-deps
         , list-t ^>=1.0.5.7
         , unliftio ^>=0.2.25.1
         , X11 ^>=1.10.3
+        , foreign-store
+        , unix ^>=2.7
 
 library
     import:           warnings, lib-deps

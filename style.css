@@ -51,5 +51,5 @@ button * {
 button:hover,
 button:hover * {
     background-color: var(--text);
-    color: var(--base);
+    color: var(--teal);
 }

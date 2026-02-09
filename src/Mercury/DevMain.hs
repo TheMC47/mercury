@@ -3,7 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Mercury.DevMain (update) where
+module Mercury.DevMain (watch) where
 
 import Control.Monad
 import Control.Monad.IO.Class
@@ -61,8 +61,8 @@ cpuAnd100 = useOr 0 cpuUsage
 
 -- Plumbing --------------------------------------------------------------------
 
-update :: IO ()
-update = activate
+watch :: IO ()
+watch = activate
 
 activate' :: (R.RenderingBackend b) => R.BackendHandle b -> MercuryRuntime b ()
 activate' handle = do
@@ -95,7 +95,7 @@ myWidget =
                                 & (classes =: (cpuAnd100 <&> \v -> ["close-button" :: Text | v >= 100]))
                        , w $
                             button
-                                & (child =: Just (w $ label & (text =: ("Increment" :: Text))))
+                                & (child =: w (label & (text =: ("Increment" :: Text))))
                                 & (onClick =: Action (void $ withTypedValue cpuUsage $ updateTypedValue cpuUsage . (+ 1)))
                        , w $ label & (text =: (#) xpropSpy)
                        ]
@@ -125,7 +125,7 @@ activate :: IO ()
 activate = do
     runtimeVariables <- SM.newIO
     uidStore <- newStoreIO
-    withBackend @GtkBackend (def{applicationId = "com.example.mercuryapp", cssFilePath = Just "style.css"}) $ \handle -> do
+    withHotReload @GtkBackend (def{applicationId = "com.example.mercuryapp", cssFilePath = Just "style.css"}) $ \handle -> do
         let backendHandle = handle
             env = RuntimeEnvironment{..}
         runMercuryRuntime (activate' handle) env

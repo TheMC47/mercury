@@ -25,6 +25,7 @@ class RenderingBackend (b :: Type) where
 
     withBackend :: (MonadUnliftIO m) => ExtraBackendData b -> (BackendHandle b -> m ()) -> m ()
     shutdown :: (MonadIO m) => BackendHandle b -> m ()
+    withHotReload :: (MonadUnliftIO m) => ExtraBackendData b -> (BackendHandle b -> m ()) -> m ()
 
     renderBox :: (MonadIO m) => RenderBoxProps b -> m (RenderedBox b)
     renderLabel :: (MonadIO m) => RenderLabelProps -> m (RenderedLabel b)
