@@ -58,6 +58,7 @@ library
           Mercury.DevMain
           Mercury.Expression
           Mercury.Runtime
+          Mercury.Runtime.Rendering
           Mercury.Runtime.Rendering.Backend
           Mercury.Runtime.Rendering.Gtk
           Mercury.Runtime.Identified

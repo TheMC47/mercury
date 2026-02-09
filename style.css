@@ -28,36 +28,28 @@
 }
 
 * {
+    all: unset;
     background-color: var(--base);
     color: var(--text);
-    border: 5px solid red !important;
     font-family: "Fira Code", monospace;
 }
 
 .close-button {
-    font-size: 20px;
+    font-size: 50px;
     color: var(--red);
 }
 
 button,
-button > *,
-button:focus,
-button:active,
-button:checked {
-    box-shadow: none !important;
-    outline: none !important;
-    border: none;
-}
-button focus-ring {
-    opacity: 0;
+button * {
+    padding: 1px 2px;
+    border-radius: 1px;
+    transition:
+        color 1s,
+        background-color 1s;
 }
 
-button:focus(visible) {
-    outline-color: transparent;
-}
-
-* {
-    -gtkwidget-focus-line-width: 0;
-    -gtkwidget-focus-padding: 0;
-    outline-width: 0;
+button:hover,
+button:hover * {
+    background-color: var(--text);
+    color: var(--base);
 }

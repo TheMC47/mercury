@@ -97,7 +97,7 @@ instance Into a a where into = id
 instance Into a (Expression a) where into = pure
 
 instance Into (Expression a) (Maybe (Expression a)) where into = Just
-instance (Into a (Expression a)) => Into a (Maybe (Expression a)) where into = Just . into
+instance Into a (Maybe (Expression a)) where into = Just . into
 instance Into (Widget' k) Widget where into = AnyWidget
 instance Into Widget (Maybe Widget) where into = Just
 instance Into (Widget' k) (Maybe Widget) where into = Just . AnyWidget
