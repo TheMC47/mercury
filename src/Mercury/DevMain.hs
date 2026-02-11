@@ -35,16 +35,22 @@ import UnliftIO.Concurrent
 myWindow :: Window
 myWindow =
     Window
-        { rootWidget = myWidget
+        { rootWidget = ewwBar
         , geometry =
             def
-                { width = Just (Percentage 50)
+                { width = Just (Percentage 100)
                 , height = Just (Percentage 2)
-                , position = (50, 1400)
+                , position = (0, 1400)
                 , strut = Just (Strut B (Absolute 30))
                 , screen = 0
                 }
-        , title = "Mercury GTK Example"
+        , -- { width = Just (Percentage 5)
+          -- , height = Just (Percentage 100)
+          -- , position = (0, 0)
+          -- , strut = Just (Strut L (Percentage 10))
+          -- , screen = 0
+          -- }
+          title = "Mercury GTK Example"
         }
 
 timestampVar :: TypedVariable Text
@@ -66,7 +72,7 @@ watch = activate
 
 activate' :: (R.RenderingBackend b) => R.BackendHandle b -> MercuryRuntime b ()
 activate' handle = do
-    let allVars = getAllVariables myWidget
+    let allVars = getAllVariables ewwBar
     traverse_ addVariable (S.toList allVars)
     traverse_ setupVariable (S.toList allVars)
 
@@ -100,6 +106,24 @@ myWidget =
                        , w $ label & (text =: (#) xpropSpy)
                        ]
               )
+
+workspacesWidget :: Widget
+workspacesWidget = w $ label & (text =: ("Workspaces" :: Text))
+
+musicWidget :: Widget
+musicWidget = w $ label & (text =: ("Music" :: Text))
+
+sidestuffWidget :: Widget
+sidestuffWidget = w $ label & (text =: ("Side" :: Text))
+
+ewwBar :: Widget
+ewwBar =
+    w $
+        centerBox
+            & (orientation =: H)
+            & (childLeft =: workspacesWidget)
+            & (childCenter =: musicWidget)
+            & (childRight =: sidestuffWidget)
 
 updateVariableValue :: Variable -> Text -> MercuryRuntime b ()
 updateVariableValue = updateValue
