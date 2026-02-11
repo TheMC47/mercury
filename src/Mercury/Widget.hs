@@ -18,11 +18,17 @@ module Mercury.Widget (
     Button,
     button,
     classes,
+    centerBox,
+    CenterBox,
     child,
     onClick,
     children,
+    childLeft,
+    childRight,
+    childCenter,
     text,
     spaceEvenly,
+    orientation,
     w,
     getAllVariables,
 ) where
@@ -34,16 +40,18 @@ import Mercury.Expression
 import Mercury.Runtime (MercuryRuntime)
 import Mercury.Runtime.Rendering.Backend (RenderingBackend)
 import Mercury.Variable (Variable)
+import Mercury.Window.Geometry (Orientation)
 
 data Action = Action {runAction :: forall (b :: Type). (RenderingBackend b) => MercuryRuntime b ()}
 
-data WidgetType = KBox | KLabel | KButton
+data WidgetType = KBox | KLabel | KButton | KCenterBox
 
 data Widget' (k :: WidgetType) where
     WBox ::
         { box_spaceEvenly :: !(Maybe (Expression Bool))
         , box_children :: ![Widget]
         , box_class :: !(Maybe (Expression [Text]))
+        , box_orientation :: !(Maybe (Expression Orientation))
         } ->
         Widget' 'KBox
     WLabel ::
@@ -57,6 +65,14 @@ data Widget' (k :: WidgetType) where
         , button_class :: !(Maybe (Expression [Text]))
         } ->
         Widget' 'KButton
+    WBCenterBox ::
+        { centerbox_childLeft :: !(Maybe Widget)
+        , centerbox_childRight :: !(Maybe Widget)
+        , centerbox_childCenter :: !(Maybe Widget)
+        , centerbox_class :: !(Maybe (Expression [Text]))
+        , centerbox_orientation :: !(Maybe (Expression Orientation))
+        } ->
+        Widget' 'KCenterBox
 
 data Widget where
     AnyWidget :: Widget' k -> Widget
@@ -73,10 +89,16 @@ getAllVariables (AnyWidget widget) = case widget of
     WButton{..} ->
         maybe mempty dependencies button_class
             <> maybe mempty getAllVariables button_child
+    WBCenterBox{..} ->
+        maybe mempty dependencies centerbox_class
+            <> maybe mempty getAllVariables centerbox_childLeft
+            <> maybe mempty getAllVariables centerbox_childRight
+            <> maybe mempty getAllVariables centerbox_childCenter
 
 type Box = Widget' 'KBox
 type Label = Widget' 'KLabel
 type Button = Widget' 'KButton
+type CenterBox = Widget' 'KCenterBox
 
 button :: Button
 button = WButton Nothing Nothing Nothing
@@ -85,7 +107,23 @@ label :: Label
 label = WLabel (pure "") Nothing
 
 box :: Box
-box = WBox Nothing [] Nothing
+box =
+    WBox
+        { box_spaceEvenly = Nothing
+        , box_children = []
+        , box_class = Nothing
+        , box_orientation = Nothing
+        }
+
+centerBox :: CenterBox
+centerBox =
+    WBCenterBox
+        { centerbox_childLeft = Nothing
+        , centerbox_childRight = Nothing
+        , centerbox_childCenter = Nothing
+        , centerbox_class = Nothing
+        , centerbox_orientation = Nothing
+        }
 
 w :: Widget' k -> Widget
 w = AnyWidget
@@ -111,6 +149,7 @@ class HasClasses s where classes :: Setter s (Maybe (Expression [Text]))
 instance HasClasses Box where classes c b = b{box_class = c}
 instance HasClasses Button where classes c b = b{button_class = c}
 instance HasClasses Label where classes c b = b{label_class = c}
+instance HasClasses CenterBox where classes c b = b{centerbox_class = c}
 
 -- Space evenly
 class HasSpaceEvenly s where spaceEvenly :: Setter s (Maybe (Expression Bool))
@@ -131,6 +170,22 @@ instance HasOnClick Button where onClick c b = b{button_onClick = c}
 -- Children
 class HasChildren s where children :: Setter s [Widget]
 instance HasChildren Box where children c b = b{box_children = c}
+
+-- Children for center box
+class HasCenterBoxChildren s where
+    childLeft :: Setter s (Maybe Widget)
+    childRight :: Setter s (Maybe Widget)
+    childCenter :: Setter s (Maybe Widget)
+
+instance HasCenterBoxChildren CenterBox where
+    childLeft c b = b{centerbox_childLeft = c}
+    childRight c b = b{centerbox_childRight = c}
+    childCenter c b = b{centerbox_childCenter = c}
+
+-- Orientation
+class HasOrientation s where orientation :: Setter s (Maybe (Expression Orientation))
+instance HasOrientation Box where orientation o b = b{box_orientation = o}
+instance HasOrientation CenterBox where orientation o b = b{centerbox_orientation = o}
 
 (=:) :: (Into v a) => Setter s a -> v -> s -> s
 s =: v = s (into v)

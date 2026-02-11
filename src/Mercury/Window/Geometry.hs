@@ -7,6 +7,7 @@ module Mercury.Window.Geometry (
     concretizeDimension,
     Strut (..),
     Direction (..),
+    Orientation (..),
 ) where
 
 import Data.Default (Default (..))
@@ -19,6 +20,8 @@ data Dimension
 concretizeDimension :: (Integral a) => a -> Dimension -> a
 concretizeDimension _ (Absolute x) = fromIntegral x
 concretizeDimension l (Percentage x) = (l * fromIntegral x) `div` 100
+
+data Orientation = H | V
 
 data Direction = L | R | T | B
 

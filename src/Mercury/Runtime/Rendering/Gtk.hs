@@ -94,6 +94,7 @@ instance RenderingBackend GtkBackend where
         box <- new Gtk.Box [#hexpand := False, #vexpand := False]
         whenJust renderBox_spaceEvenly (#setHomogeneous box)
         whenJust renderBox_class (#setCssClasses box)
+        whenJust renderBox_orientation (#setOrientation box . toGTKOrientation)
         traverse_ (#append box) [w | MkWidget w <- renderBox_children]
         widget <- Gtk.toWidget box
         pure $
@@ -101,6 +102,7 @@ instance RenderingBackend GtkBackend where
                 { box_widget = MkWidget widget
                 , box_setClass = #setCssClasses box
                 , box_setSpaceEvenly = #setHomogeneous box
+                , box_setOrientation = #setOrientation box . toGTKOrientation
                 }
 
     renderLabel RenderLabelProps{..} = do
@@ -124,7 +126,7 @@ instance RenderingBackend GtkBackend where
     renderButton RenderButtonProps{..} = do
         btn <- new Gtk.Button [#hexpand := False, #vexpand := False]
         whenJust renderButton_class (#setCssClasses btn)
-        whenJust renderButton_child (#setChild btn . (\(MkWidget w) -> Just w))
+        whenJust renderButton_child (#setChild btn . Just . unwrap)
         whenJust renderButton_onClick $ \action -> do
             onClickIO <- toIO action
             void $ Gtk.on btn #clicked onClickIO
@@ -136,6 +138,21 @@ instance RenderingBackend GtkBackend where
                 , button_setOnClick = \action -> do
                     onClickIO <- toIO action
                     void $ Gtk.on btn #clicked onClickIO
+                }
+
+    renderCenterBox RenderCenterBoxProps{..} = do
+        cbox <- new Gtk.CenterBox [#hexpand := False, #vexpand := False]
+        whenJust renderCenterBox_class (#setCssClasses cbox)
+        whenJust renderCenterBox_childLeft (#setStartWidget cbox . Just . unwrap)
+        whenJust renderCenterBox_childCenter (#setCenterWidget cbox . Just . unwrap)
+        whenJust renderCenterBox_childRight (#setEndWidget cbox . Just . unwrap)
+        whenJust renderCenterBox_orientation (#setOrientation cbox . toGTKOrientation)
+        widget <- Gtk.toWidget cbox
+        pure $
+            RenderedCenterBox
+                { centerbox_widget = MkWidget widget
+                , centerbox_setClass = #setCssClasses cbox
+                , centerbox_setOrientation = #setOrientation cbox . toGTKOrientation
                 }
 
     createWindow (MkBackendHandle app) (MkWidget w) geom t = do
@@ -151,6 +168,13 @@ instance RenderingBackend GtkBackend where
         setWindowGeometry win geom
         #present win
         return (MkWindow win)
+
+toGTKOrientation :: Orientation -> Gtk.Orientation
+toGTKOrientation H = Gtk.OrientationHorizontal
+toGTKOrientation V = Gtk.OrientationVertical
+
+unwrap :: Widget GtkBackend -> Gtk.Widget
+unwrap (MkWidget w) = w
 
 instance Default (ExtraBackendData GtkBackend) where
     def =
