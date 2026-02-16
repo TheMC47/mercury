@@ -16,7 +16,7 @@ module Mercury.Runtime.Rendering.Backend (
 import Control.Monad.IO.Class
 import Data.Kind (Type)
 import Data.Text
-import Mercury.Window.Geometry (Geometry, Orientation)
+import Mercury.Window.Geometry (Alignment, Geometry, Orientation)
 import UnliftIO
 
 class RenderingBackend (b :: Type) where
@@ -41,6 +41,8 @@ data RenderBoxProps b = RenderBoxProps
     , renderBox_children :: ![Widget b]
     , renderBox_class :: !(Maybe [Text])
     , renderBox_orientation :: !(Maybe Orientation)
+    , renderBox_halign :: !(Maybe Alignment)
+    , renderBox_valign :: !(Maybe Alignment)
     }
 
 data RenderLabelProps = RenderLabelProps
@@ -79,6 +81,8 @@ data RenderedBox b = RenderedBox
     , box_setSpaceEvenly :: forall m. (MonadUnliftIO m) => Bool -> m ()
     , box_setClass :: forall m. (MonadUnliftIO m) => [Text] -> m ()
     , box_setOrientation :: forall m. (MonadUnliftIO m) => Orientation -> m ()
+    , box_halign :: forall m. (MonadUnliftIO m) => Alignment -> m ()
+    , box_valign :: forall m. (MonadUnliftIO m) => Alignment -> m ()
     }
 
 data RenderedCenterBox b = RenderedCenterBox

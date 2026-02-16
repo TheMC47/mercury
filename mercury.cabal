@@ -58,7 +58,9 @@ library
     import:           warnings, lib-deps
     exposed-modules:
           Mercury.DevMain
+          Mercury.Examples
           Mercury.Expression
+          Mercury.Prelude
           Mercury.Runtime
           Mercury.Runtime.Rendering
           Mercury.Runtime.Rendering.Backend
@@ -91,7 +93,9 @@ test-suite mercury-test
     main-is:          Spec.hs
     other-modules:
         Mercury.DevMain
+        Mercury.Examples
         Mercury.Expression
+        Mercury.Prelude
         Mercury.Runtime
         Mercury.Runtime.Rendering.Backend
         Mercury.Runtime.Rendering.Gtk

@@ -9,12 +9,10 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Default
 import Data.Foldable
-import Data.Function
-import Data.Functor
 import Data.Set qualified as S
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Time
+import Mercury.Examples (ewwBar)
 import Mercury.Runtime
 import Mercury.Runtime.Identified (newStoreIO)
 import Mercury.Runtime.Rendering
@@ -40,8 +38,8 @@ myWindow =
             def
                 { width = Just (Percentage 100)
                 , height = Just (Percentage 2)
-                , position = (0, 1400)
-                , strut = Just (Strut B (Absolute 30))
+                , position = (0, 0)
+                , strut = Just (Strut T (Absolute 30))
                 , screen = 0
                 }
         , -- { width = Just (Percentage 5)
@@ -52,9 +50,6 @@ myWindow =
           -- }
           title = "Mercury GTK Example"
         }
-
-timestampVar :: TypedVariable Text
-timestampVar = pollingVar "current_time" 1000 (tshow <$> getCurrentTime)
 
 cpuUsage :: TypedVariable Int
 cpuUsage = pureVar "cpu_usage" 99
@@ -84,46 +79,25 @@ runPollingAction (PollingScriptAction (Script path args)) = do
     output <- liftIO $ readProcess path args ""
     return $ T.pack (init output)
 
-tshow :: (Show a) => a -> Text
-tshow = T.pack . show
-
-myWidget :: Widget
-myWidget =
-    w $
-        box
-            & (spaceEvenly =: False)
-            & ( children
-                    =: [ w $ label & (text =: (#) timestampVar)
-                       , w $
-                            button
-                                & (child =: w (label & (text =: tshow <$> cpuAnd100)))
-                                & (onClick =: Action closeWindows)
-                                & (classes =: (cpuAnd100 <&> \v -> ["close-button" :: Text | v >= 100]))
-                       , w $
-                            button
-                                & (child =: w (label & (text =: ("Increment" :: Text))))
-                                & (onClick =: Action (void $ withTypedValue cpuUsage $ updateTypedValue cpuUsage . (+ 1)))
-                       , w $ label & (text =: (#) xpropSpy)
-                       ]
-              )
-
-workspacesWidget :: Widget
-workspacesWidget = w $ label & (text =: ("Workspaces" :: Text))
-
-musicWidget :: Widget
-musicWidget = w $ label & (text =: ("Music" :: Text))
-
-sidestuffWidget :: Widget
-sidestuffWidget = w $ label & (text =: ("Side" :: Text))
-
-ewwBar :: Widget
-ewwBar =
-    w $
-        centerBox
-            & (orientation =: H)
-            & (childLeft =: workspacesWidget)
-            & (childCenter =: musicWidget)
-            & (childRight =: sidestuffWidget)
+-- myWidget :: Widget
+-- myWidget =
+--     w $
+--         box
+--             & (spaceEvenly =: False)
+--             & ( children
+--                     =: [ w $ label & (text =: (#) timestampVar)
+--                        , w $
+--                             button
+--                                 & (child =: w (label & (text =: tshow <$> cpuAnd100)))
+--                                 & (onClick =: Action closeWindows)
+--                                 & (classes =: (cpuAnd100 <&> \v -> ["close-button" :: Text | v >= 100]))
+--                        , w $
+--                             button
+--                                 & (child =: w (label & (text =: ("Increment" :: Text))))
+--                                 & (onClick =: Action (void $ withTypedValue cpuUsage $ updateTypedValue cpuUsage . (+ 1)))
+--                        , w $ label & (text =: (#) xpropSpy)
+--                        ]
+--               )
 
 updateVariableValue :: Variable -> Text -> MercuryRuntime b ()
 updateVariableValue = updateValue

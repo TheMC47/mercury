@@ -8,6 +8,7 @@ module Mercury.Window.Geometry (
     Strut (..),
     Direction (..),
     Orientation (..),
+    Alignment,
 ) where
 
 import Data.Default (Default (..))
@@ -22,6 +23,9 @@ concretizeDimension _ (Absolute x) = fromIntegral x
 concretizeDimension l (Percentage x) = (l * fromIntegral x) `div` 100
 
 data Orientation = H | V
+
+data Alignment = Start | CenterAlign | End
+    deriving (Eq, Show)
 
 data Direction = L | R | T | B
 

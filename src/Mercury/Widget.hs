@@ -31,8 +31,10 @@ module Mercury.Widget (
     orientation,
     w,
     getAllVariables,
+    (&),
 ) where
 
+import Data.Function ((&))
 import Data.Kind (Type)
 import Data.Set qualified as S
 import Data.Text (Text)
@@ -40,7 +42,7 @@ import Mercury.Expression
 import Mercury.Runtime (MercuryRuntime)
 import Mercury.Runtime.Rendering.Backend (RenderingBackend)
 import Mercury.Variable (Variable)
-import Mercury.Window.Geometry (Orientation)
+import Mercury.Window.Geometry (Alignment, Orientation)
 
 data Action = Action {runAction :: forall (b :: Type). (RenderingBackend b) => MercuryRuntime b ()}
 
@@ -52,6 +54,8 @@ data Widget' (k :: WidgetType) where
         , box_children :: ![Widget]
         , box_class :: !(Maybe (Expression [Text]))
         , box_orientation :: !(Maybe (Expression Orientation))
+        , box_halign :: !(Maybe (Expression Alignment))
+        , box_valign :: !(Maybe (Expression Alignment))
         } ->
         Widget' 'KBox
     WLabel ::
@@ -113,6 +117,8 @@ box =
         , box_children = []
         , box_class = Nothing
         , box_orientation = Nothing
+        , box_halign = Nothing
+        , box_valign = Nothing
         }
 
 centerBox :: CenterBox
@@ -186,6 +192,14 @@ instance HasCenterBoxChildren CenterBox where
 class HasOrientation s where orientation :: Setter s (Maybe (Expression Orientation))
 instance HasOrientation Box where orientation o b = b{box_orientation = o}
 instance HasOrientation CenterBox where orientation o b = b{centerbox_orientation = o}
+
+-- Halign
+class HasHAlign s where halign :: Setter s (Maybe (Expression Alignment))
+instance HasHAlign Box where halign a b = b{box_halign = a}
+
+-- Valign
+class HasVAlign s where valign :: Setter s (Maybe (Expression Alignment))
+instance HasVAlign Box where valign a b = b{box_valign = a}
 
 (=:) :: (Into v a) => Setter s a -> v -> s -> s
 s =: v = s (into v)
