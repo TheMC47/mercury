@@ -8,6 +8,7 @@ module Mercury.Window.Geometry (
     Strut (..),
     Direction (..),
     Orientation (..),
+    Alignment (..),
 ) where
 
 import Data.Default (Default (..))
@@ -26,6 +27,9 @@ data Orientation = H | V
 data Direction = L | R | T | B
 
 data Strut = Strut !Direction !Dimension
+
+data Alignment = Start | Center | End
+    deriving (Eq, Show)
 
 -- type Position = (Dimension, Dimension)
 type Position = (Int, Int)
@@ -55,8 +59,8 @@ data Anchor
     | TopCenter
     | TopRight
     | CenterLeft
-    | Center
-    | CenterRight
+    | -- | Center
+      CenterRight
     | BottomLeft
     | BottomCenter
     | BottomRight

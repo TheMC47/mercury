@@ -26,14 +26,14 @@ import GI.Gdk qualified as Gdk
 import GI.Gdk.Objects.Surface
 import GI.GdkX11 qualified as GdkX11
 import GI.Gtk qualified as Gtk
-import GI.Pango
+import GI.Pango hiding (Alignment)
 import Graphics.X11 (rect_height, rect_width, rect_x, rect_y)
 import Graphics.X11 qualified as X11
 import Graphics.X11.Xinerama (getScreenInfo)
 import Graphics.X11.Xlib.Extras as X11
 import Mercury.Runtime.Rendering.Backend
 import Mercury.Window.Geometry
-import System.Posix
+import System.Posix hiding (Start)
 import UnliftIO
 
 data GtkBackend = GtkBackend
@@ -97,12 +97,18 @@ instance RenderingBackend GtkBackend where
         whenJust renderBox_orientation (#setOrientation box . toGTKOrientation)
         traverse_ (#append box) [w | MkWidget w <- renderBox_children]
         widget <- Gtk.toWidget box
+        whenJust renderBox_halign (#setHalign box . toGTKAlign)
+        whenJust renderBox_valign (#setValign box . toGTKAlign)
+        whenJust renderBox_spacing (#setSpacing box . fi)
         pure $
             RenderedBox
                 { box_widget = MkWidget widget
                 , box_setClass = #setCssClasses box
                 , box_setSpaceEvenly = #setHomogeneous box
                 , box_setOrientation = #setOrientation box . toGTKOrientation
+                , box_setHAlign = #setHalign box . toGTKAlign
+                , box_setVAlign = #setValign box . toGTKAlign
+                , box_setSpacing = #setSpacing box . fi
                 }
 
     renderLabel RenderLabelProps{..} = do
@@ -172,6 +178,11 @@ instance RenderingBackend GtkBackend where
 toGTKOrientation :: Orientation -> Gtk.Orientation
 toGTKOrientation H = Gtk.OrientationHorizontal
 toGTKOrientation V = Gtk.OrientationVertical
+
+toGTKAlign :: Alignment -> Gtk.Align
+toGTKAlign Start = Gtk.AlignStart
+toGTKAlign Center = Gtk.AlignCenter
+toGTKAlign End = Gtk.AlignEnd
 
 unwrap :: Widget GtkBackend -> Gtk.Widget
 unwrap (MkWidget w) = w

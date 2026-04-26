@@ -40,6 +40,9 @@ render (AnyWidget widget) = case widget of
         se <- mapM evalExpression box_spaceEvenly
         cls <- mapM evalExpression box_class
         o <- mapM evalExpression box_orientation
+        ha <- mapM evalExpression box_halign
+        va <- mapM evalExpression box_valign
+        sp <- mapM evalExpression box_spacing
         R.RenderedBox{..} <-
             renderBox
                 RenderBoxProps
@@ -47,6 +50,9 @@ render (AnyWidget widget) = case widget of
                     , renderBox_children = renderedChildren
                     , renderBox_class = cls
                     , renderBox_orientation = o
+                    , renderBox_halign = ha
+                    , renderBox_valign = va
+                    , renderBox_spacing = sp
                     }
         whenJust box_spaceEvenly (void . (`mountExpression` box_setSpaceEvenly))
         whenJust box_class (void . (`mountExpression` box_setClass))
