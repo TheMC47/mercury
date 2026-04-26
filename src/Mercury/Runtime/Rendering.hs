@@ -1,4 +1,3 @@
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Mercury.Runtime.Rendering (
@@ -27,15 +26,15 @@ mountExpression expr onChange =
         (S.toList (dependencies expr))
 
 render :: (R.RenderingBackend b) => Widget -> MercuryRuntime b (R.Widget b)
-render (AnyWidget widget) = case widget of
-    WLabel{..} -> do
+render widget = case widget of
+    AnyLabel WLabel{..} -> do
         textValue <- evalExpression label_text
         cls <- mapM evalExpression label_class
         RenderedLabel{..} <- renderLabel RenderLabelProps{renderLabel_text = textValue, renderLabel_class = cls}
         mountExpression label_text label_setText
         whenJust label_class (void . (`mountExpression` label_setClass))
         return label_widget
-    WBox{..} -> do
+    AnyBox WBox{..} -> do
         renderedChildren <- traverse render box_children
         se <- mapM evalExpression box_spaceEvenly
         cls <- mapM evalExpression box_class
@@ -57,7 +56,7 @@ render (AnyWidget widget) = case widget of
         whenJust box_spaceEvenly (void . (`mountExpression` box_setSpaceEvenly))
         whenJust box_class (void . (`mountExpression` box_setClass))
         return box_widget
-    WButton{..} -> do
+    AnyButton WButton{..} -> do
         renderedChild <- traverse render button_child
         cls <- mapM evalExpression button_class
         RenderedButton{..} <-
@@ -67,7 +66,7 @@ render (AnyWidget widget) = case widget of
                 button_onClick
         whenJust button_class (void . (`mountExpression` button_setClass))
         return button_widget
-    WBCenterBox{..} -> do
+    AnyCenterBox WBCenterBox{..} -> do
         renderedChildLeft <- traverse render centerbox_childLeft
         renderedChildRight <- traverse render centerbox_childRight
         renderedChildCenter <- traverse render centerbox_childCenter

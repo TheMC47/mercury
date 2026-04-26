@@ -1,25 +1,24 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Mercury.Widget (
-    Widget' (..),
     Action (..),
     module Mercury.Expression,
     Widget (..),
+    Box (..),
+    Label (..),
+    Button (..),
+    CenterBox (..),
+    ToWidget (..),
     (=:),
-    Box,
     box,
-    Label,
     label,
-    Button,
     button,
-    classes,
     centerBox,
-    CenterBox,
+    classes,
     child,
     onClick,
     children,
@@ -32,13 +31,13 @@ module Mercury.Widget (
     halign,
     valign,
     spacing,
-    w,
     getAllVariables,
 ) where
 
 import Data.Kind (Type)
 import Data.Set qualified as S
 import Data.Text (Text)
+import GHC.Generics
 import Mercury.Expression
 import Mercury.Runtime (MercuryRuntime)
 import Mercury.Runtime.Rendering.Backend (RenderingBackend)
@@ -47,64 +46,85 @@ import Mercury.Window.Geometry (Alignment, Orientation)
 
 data Action = Action {runAction :: forall (b :: Type). (RenderingBackend b) => MercuryRuntime b ()}
 
-data WidgetType = KBox | KLabel | KButton | KCenterBox
+class HasVariables a where
+    getAllVariables :: a -> S.Set Variable
+    default getAllVariables :: (Generic a, GHasVariables (Rep a)) => a -> S.Set Variable
+    getAllVariables x = ggetVariables (from x)
 
-data Widget' (k :: WidgetType) where
-    WBox ::
-        { box_spaceEvenly :: !(Maybe (Expression Bool))
-        , box_children :: ![Widget]
-        , box_class :: !(Maybe (Expression [Text]))
-        , box_orientation :: !(Maybe (Expression Orientation))
-        , box_halign :: !(Maybe (Expression Alignment))
-        , box_valign :: !(Maybe (Expression Alignment))
-        , box_spacing :: !(Maybe (Expression Int))
-        } ->
-        Widget' 'KBox
-    WLabel ::
-        { label_text :: !(Expression Text)
-        , label_class :: !(Maybe (Expression [Text]))
-        } ->
-        Widget' 'KLabel
-    WButton ::
-        { button_child :: !(Maybe Widget)
-        , button_onClick :: !(Maybe Action)
-        , button_class :: !(Maybe (Expression [Text]))
-        } ->
-        Widget' 'KButton
-    WBCenterBox ::
-        { centerbox_childLeft :: !(Maybe Widget)
-        , centerbox_childRight :: !(Maybe Widget)
-        , centerbox_childCenter :: !(Maybe Widget)
-        , centerbox_class :: !(Maybe (Expression [Text]))
-        , centerbox_orientation :: !(Maybe (Expression Orientation))
-        } ->
-        Widget' 'KCenterBox
+instance HasVariables (Expression a) where
+    getAllVariables = dependencies
 
-data Widget where
-    AnyWidget :: Widget' k -> Widget
+instance HasVariables Text where getAllVariables _ = mempty
+instance HasVariables Action where getAllVariables _ = mempty
+instance (HasVariables a) => HasVariables [a] where getAllVariables = foldMap getAllVariables
 
-getAllVariables :: Widget -> S.Set Variable
-getAllVariables (AnyWidget widget) = case widget of
-    WBox{..} ->
-        maybe mempty dependencies box_spaceEvenly
-            <> maybe mempty dependencies box_class
-            <> foldMap getAllVariables box_children
-    WLabel{..} ->
-        maybe mempty dependencies label_class
-            <> dependencies label_text
-    WButton{..} ->
-        maybe mempty dependencies button_class
-            <> maybe mempty getAllVariables button_child
-    WBCenterBox{..} ->
-        maybe mempty dependencies centerbox_class
-            <> maybe mempty getAllVariables centerbox_childLeft
-            <> maybe mempty getAllVariables centerbox_childRight
-            <> maybe mempty getAllVariables centerbox_childCenter
+instance (HasVariables a) => HasVariables (Maybe a) where
+    getAllVariables Nothing = mempty
+    getAllVariables (Just a) = getAllVariables a
 
-type Box = Widget' 'KBox
-type Label = Widget' 'KLabel
-type Button = Widget' 'KButton
-type CenterBox = Widget' 'KCenterBox
+class GHasVariables f where
+    ggetVariables :: f p -> S.Set Variable
+
+instance GHasVariables U1 where
+    ggetVariables U1 = mempty
+
+instance (GHasVariables a, GHasVariables b) => GHasVariables (a :*: b) where
+    ggetVariables (a :*: b) = ggetVariables a <> ggetVariables b
+instance (GHasVariables a, GHasVariables b) => GHasVariables (a :+: b) where
+    ggetVariables (L1 x) = ggetVariables x
+    ggetVariables (R1 x) = ggetVariables x
+
+instance (GHasVariables a) => GHasVariables (M1 i c a) where
+    ggetVariables (M1 x) = ggetVariables x
+
+instance (HasVariables a) => GHasVariables (K1 i a) where
+    ggetVariables (K1 x) = getAllVariables x
+
+data Box = WBox
+    { box_spaceEvenly :: !(Maybe (Expression Bool))
+    , box_children :: ![Widget]
+    , box_class :: !(Maybe (Expression [Text]))
+    , box_orientation :: !(Maybe (Expression Orientation))
+    , box_halign :: !(Maybe (Expression Alignment))
+    , box_valign :: !(Maybe (Expression Alignment))
+    , box_spacing :: !(Maybe (Expression Int))
+    }
+    deriving (Generic)
+
+instance HasVariables Box
+
+data Label = WLabel
+    { label_text :: !(Expression Text)
+    , label_class :: !(Maybe (Expression [Text]))
+    }
+    deriving (Generic)
+instance HasVariables Label
+
+data Button = WButton
+    { button_child :: !(Maybe Widget)
+    , button_onClick :: !(Maybe Action)
+    , button_class :: !(Maybe (Expression [Text]))
+    }
+    deriving (Generic)
+instance HasVariables Button
+
+data CenterBox = WBCenterBox
+    { centerbox_childLeft :: !(Maybe Widget)
+    , centerbox_childRight :: !(Maybe Widget)
+    , centerbox_childCenter :: !(Maybe Widget)
+    , centerbox_class :: !(Maybe (Expression [Text]))
+    , centerbox_orientation :: !(Maybe (Expression Orientation))
+    }
+    deriving (Generic)
+instance HasVariables CenterBox
+
+data Widget
+    = AnyBox !Box
+    | AnyLabel !Label
+    | AnyButton !Button
+    | AnyCenterBox !CenterBox
+    deriving (Generic)
+instance HasVariables Widget
 
 button :: Button
 button = WButton Nothing Nothing Nothing
@@ -134,9 +154,6 @@ centerBox =
         , centerbox_orientation = Nothing
         }
 
-w :: Widget' k -> Widget
-w = AnyWidget
-
 class Into a b where
     into :: a -> b
 
@@ -145,11 +162,20 @@ instance Into a (Expression a) where into = pure
 
 instance Into (Expression a) (Maybe (Expression a)) where into = Just
 instance Into a (Maybe (Expression a)) where into = Just . into
-instance Into (Widget' k) Widget where into = AnyWidget
-instance Into Widget (Maybe Widget) where into = Just
-instance Into (Widget' k) (Maybe Widget) where into = Just . AnyWidget
 instance Into Action (Maybe Action) where into = Just
 instance Into a [a] where into a = [a]
+
+class ToWidget a where
+    w :: a -> Widget
+
+instance ToWidget Box where w = AnyBox
+instance ToWidget Label where w = AnyLabel
+instance ToWidget Button where w = AnyButton
+instance ToWidget CenterBox where w = AnyCenterBox
+instance ToWidget Widget where w = id
+
+instance (ToWidget a) => Into a Widget where into = w
+instance (ToWidget a) => Into a (Maybe Widget) where into = Just . w
 
 type Setter s a = a -> s -> s
 
