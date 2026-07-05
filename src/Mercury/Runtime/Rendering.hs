@@ -28,20 +28,20 @@ mountExpression expr onChange =
 render :: (R.RenderingBackend b) => Widget -> MercuryRuntime b (R.Widget b)
 render widget = case widget of
     AnyLabel WLabel{..} -> do
-        textValue <- evalExpression label_text
-        cls <- mapM evalExpression label_class
+        textValue <- evalExpression _labelText
+        cls <- mapM evalExpression _labelClasses
         RenderedLabel{..} <- renderLabel RenderLabelProps{renderLabel_text = textValue, renderLabel_class = cls}
-        mountExpression label_text label_setText
-        whenJust label_class (void . (`mountExpression` label_setClass))
+        mountExpression _labelText label_setText
+        whenJust _labelClasses (void . (`mountExpression` label_setClass))
         return label_widget
     AnyBox WBox{..} -> do
-        renderedChildren <- traverse render box_children
-        se <- mapM evalExpression box_spaceEvenly
-        cls <- mapM evalExpression box_class
-        o <- mapM evalExpression box_orientation
-        ha <- mapM evalExpression box_halign
-        va <- mapM evalExpression box_valign
-        sp <- mapM evalExpression box_spacing
+        renderedChildren <- traverse render _boxChildren
+        se <- mapM evalExpression _boxSpaceEvenly
+        cls <- mapM evalExpression _boxClasses
+        o <- mapM evalExpression _boxOrientation
+        ha <- mapM evalExpression _boxHalign
+        va <- mapM evalExpression _boxValign
+        sp <- mapM evalExpression _boxSpacing
         R.RenderedBox{..} <-
             renderBox
                 RenderBoxProps
@@ -53,25 +53,25 @@ render widget = case widget of
                     , renderBox_valign = va
                     , renderBox_spacing = sp
                     }
-        whenJust box_spaceEvenly (void . (`mountExpression` box_setSpaceEvenly))
-        whenJust box_class (void . (`mountExpression` box_setClass))
+        whenJust _boxSpaceEvenly (void . (`mountExpression` box_setSpaceEvenly))
+        whenJust _boxClasses (void . (`mountExpression` box_setClass))
         return box_widget
     AnyButton WButton{..} -> do
-        renderedChild <- traverse render button_child
-        cls <- mapM evalExpression button_class
+        renderedChild <- traverse render _buttonChild
+        cls <- mapM evalExpression _buttonClasses
         RenderedButton{..} <-
             maybe
                 (renderButton RenderButtonProps{renderButton_child = renderedChild, renderButton_onClick = Nothing, renderButton_class = cls})
                 (\(Action action) -> renderButton RenderButtonProps{renderButton_child = renderedChild, renderButton_onClick = Just action, renderButton_class = cls})
-                button_onClick
-        whenJust button_class (void . (`mountExpression` button_setClass))
+                _buttonOnClick
+        whenJust _buttonClasses (void . (`mountExpression` button_setClass))
         return button_widget
     AnyCenterBox WBCenterBox{..} -> do
-        renderedChildLeft <- traverse render centerbox_childLeft
-        renderedChildRight <- traverse render centerbox_childRight
-        renderedChildCenter <- traverse render centerbox_childCenter
-        cls <- mapM evalExpression centerbox_class
-        o <- mapM evalExpression centerbox_orientation
+        renderedChildLeft <- traverse render _centerBoxChildLeft
+        renderedChildRight <- traverse render _centerBoxChildRight
+        renderedChildCenter <- traverse render _centerBoxChildCenter
+        cls <- mapM evalExpression _centerBoxClasses
+        o <- mapM evalExpression _centerBoxOrientation
         RenderedCenterBox{..} <-
             renderCenterBox
                 RenderCenterBoxProps
@@ -81,7 +81,7 @@ render widget = case widget of
                     , renderCenterBox_class = cls
                     , renderCenterBox_orientation = o
                     }
-        whenJust centerbox_class (void . (`mountExpression` centerbox_setClass))
+        whenJust _centerBoxClasses (void . (`mountExpression` centerbox_setClass))
         return centerbox_widget
 
 renderWindow :: (RenderingBackend b) => R.BackendHandle b -> Window -> MercuryRuntime b (R.Window b)

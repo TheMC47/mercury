@@ -1,17 +1,16 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Mercury.Expression (
     Expression (eval, dependencies),
     isStatic,
     useRaw,
     use,
     useOr,
+    lit,
     (#),
 ) where
 
 import Data.Maybe
-import qualified Data.Set as S
-import Data.Text (Text)
+import Data.Set qualified as S
+import Data.Text (Text, empty)
 import Mercury.Variable
 import Mercury.Variable.Typed
 
@@ -36,8 +35,11 @@ use tv = decode tv <$> useRaw (rawVariable tv)
 useOr :: a -> TypedVariable a -> Expression a
 useOr fallback tv = fromMaybe fallback <$> use tv
 
+lit :: Text -> Expression Text
+lit = pure
+
 (#) :: TypedVariable Text -> Expression Text
-(#) = useOr ""
+(#) = useOr empty
 infixl 9 #
 
 instance Functor Expression where

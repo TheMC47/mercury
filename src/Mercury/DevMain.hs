@@ -92,10 +92,10 @@ myWidget =
                             button
                                 & (child =: w (label & (text =: tshow <$> cpuAnd100)))
                                 & (onClick =: Action closeWindows)
-                                & (classes =: (cpuAnd100 <&> \v -> ["close-button" :: Text | v >= 100]))
+                                & (classes =: (cpuAnd100 <&> \v -> ["close-button" | v >= 100] :: [Text]))
                        , w $
                             button
-                                & (child =: w (label & (text =: ("Increment" :: Text))))
+                                & (child =: w (label & (text =: lit "Increment")))
                                 & (onClick =: Action (void $ withTypedValue cpuUsage $ updateTypedValue cpuUsage . (+ 1)))
                        , w $ label & (text =: (#) xpropSpy)
                        ]
