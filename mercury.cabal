@@ -29,14 +29,14 @@ common executable-flags
 
 common lib-deps
     build-depends:
-          base ^>=4.18.3.0
-        , gi-gtk4 ^>=4.0.12
-        , gi-glib ^>=2.0.30
-        , gi-gio ^>=2.0.35
-        , gi-gdk4 ^>=4.0.10
-        , gi-gdkx11 ^>=4.0.9
-        , gi-pango ^>=1.0.30
-        , haskell-gi-base ^>=0.26.9
+          base ^>=4.20.2.0
+        , gi-gtk4 >=4.0.12
+        , gi-glib >=2.0.30
+        , gi-gio >=2.0.35
+        , gi-gdk4 >=4.0.10
+        , gi-gdkx11 >=4.0.9
+        , gi-pango >=1.0.30
+        , haskell-gi-base >=0.26.9
         , text
         , process
         , transformers
@@ -44,16 +44,16 @@ common lib-deps
         , time
         , stm
         , lens
-        , stm-containers ^>=1.2.1.1
-        , hashable ^>=1.5.0.0
-        , mtl ^>=2.3.1
-        , data-default ^>=0.8.0.1
-        , focus ^>=1.0.3.2
-        , list-t ^>=1.0.5.7
-        , unliftio ^>=0.2.25.1
-        , X11 ^>=1.10.3
+        , stm-containers >=1.2.1.1
+        , hashable >=1.5.0.0
+        , mtl >=2.3.1
+        , data-default >=0.8.0.1
+        , focus >=1.0.3.2
+        , list-t >=1.0.5.7
+        , unliftio >=0.2.25.1
+        , X11 >=1.10.3
         , foreign-store
-        , unix ^>=2.7
+        , unix >=2.8.7.0
 
 library
     import:           warnings, lib-deps
@@ -78,7 +78,7 @@ executable mercury
     import:           warnings, executable-flags
     main-is:          Main.hs
     build-depends:
-        base ^>=4.18.3.0,
+        base ^>=4.20.2.0,
         mercury
 
     hs-source-dirs:   app
